@@ -27,7 +27,7 @@ terraform apply
 # Deploy application
 kubectl apply -f kubernetes/
 
-Project Structure
+## Project Structure
 devops-portfolio/
 ├── .github/workflows/    # CI/CD pipelines
 ├── infrastructure/       # IaC configurations
