@@ -1,6 +1,6 @@
 # DevOps Portfolio Project
 
-![CI/CD Pipeline](https://img.shields.io/github/actions/workflow/status/ctaniclab/devops-portfolio/docker-build.yml)
+![CI/CD Status](https://img.shields.io/github/actions/workflow/status/ctaniclab/devops-portfolio/docker-build.yml)
 
 Complete DevOps pipeline demonstrating:
 
@@ -11,21 +11,20 @@ Complete DevOps pipeline demonstrating:
 - Monitoring (Prometheus/Grafana)
 - Logging (ELK Stack)
 
-Project Structure
+## Project Structure
 devops-portfolio/
-├── .github/workflows/    # CI/CD pipelines
-├── infrastructure/       # IaC configurations
-├── kubernetes/          # K8s manifests
-├── scripts/             # Utility scripts
-└── README.md            # Project documentation
-Badges
+├── .github/workflows/ # CI/CD pipelines
+├── infrastructure/ # IaC configurations
+├── kubernetes/ # K8s manifests
+├── scripts/ # Utility scripts
+└── README.md # Project documentation
 
-![image](https://github.com/user-attachments/assets/5e1e5bd2-55e1-431f-9cb7-bc6e994d95c8)
 
-![image](https://github.com/user-attachments/assets/3536c56c-aa6b-4e6f-a75f-006eb21c92b4)
+## Badges
 
-![image](https://github.com/user-attachments/assets/b4066791-e55c-4fbe-b274-bd28394427e6)
-
+[![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
 ## Quick Start
 
