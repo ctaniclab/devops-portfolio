@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 # DevOps Portfolio Project
 
 ![CI/CD Pipeline](https://img.shields.io/github/actions/workflow/status/<ВАШ_USERNAME>/devops-portfolio/docker-build.yml)
+=======
+# devops-portfolio
+Complete DevOps pipeline with CI/CD, Kubernetes, monitoring and logging
+>>>>>>> a19b4a07fecaaad796b1dcce08c2094ffd76b5bb
 
 Complete DevOps pipeline demonstrating:
 
@@ -15,7 +20,11 @@ Complete DevOps pipeline demonstrating:
 
 ```bash
 # Clone repository
+<<<<<<< HEAD
 git clone https://github.com/<ВАШ_USERNAME>/devops-portfolio.git
+=======
+git clone https://github.com/ctaniclab/devops-portfolio.git
+>>>>>>> a19b4a07fecaaad796b1dcce08c2094ffd76b5bb
 cd devops-portfolio
 
 # Initialize infrastructure
@@ -26,6 +35,7 @@ terraform apply
 
 # Deploy application
 kubectl apply -f kubernetes/
+<<<<<<< HEAD
 
 
 
@@ -42,3 +52,5 @@ resource "aws_vpc" "main" {
     Name = "portfolio-vpc"
   }
 }
+=======
+>>>>>>> a19b4a07fecaaad796b1dcce08c2094ffd76b5bb
