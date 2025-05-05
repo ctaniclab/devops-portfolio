@@ -20,7 +20,8 @@ devops-portfolio/
 └── README.md            # Project documentation
 Badges
 
-https://terraform.io/
+![image](https://github.com/user-attachments/assets/5e1e5bd2-55e1-431f-9cb7-bc6e994d95c8)
+
 https://kubernetes.io/
 https://docker.com/
 
