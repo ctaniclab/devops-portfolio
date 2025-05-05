@@ -35,6 +35,6 @@ devops-portfolio/
 └── README.md            # Project documentation
 Badges
 
-https://img.shields.io/badge/terraform-%25235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white
-https://img.shields.io/badge/kubernetes-%2523326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white
-https://img.shields.io/badge/docker-%25230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white
+https://terraform.io/
+https://kubernetes.io/
+https://docker.com/
