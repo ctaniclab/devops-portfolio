@@ -14,7 +14,7 @@ Complete DevOps pipeline demonstrating:
 
 ```bash
 # Clone repository
-git clone https://github.com/<ВАШ_USERNAME>/devops-portfolio.git
+git clone https://github.com/ctaniclab/devops-portfolio.git
 cd devops-portfolio
 
 # Initialize infrastructure
