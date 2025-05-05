@@ -11,6 +11,19 @@ Complete DevOps pipeline demonstrating:
 - Monitoring (Prometheus/Grafana)
 - Logging (ELK Stack)
 
+Project Structure
+devops-portfolio/
+├── .github/workflows/    # CI/CD pipelines
+├── infrastructure/       # IaC configurations
+├── kubernetes/          # K8s manifests
+├── scripts/             # Utility scripts
+└── README.md            # Project documentation
+Badges
+
+https://terraform.io/
+https://kubernetes.io/
+https://docker.com/
+
 ## Quick Start
 
 ```bash
@@ -26,15 +39,3 @@ terraform apply
 
 # Deploy application
 kubectl apply -f kubernetes/
-Project Structure
-devops-portfolio/
-├── .github/workflows/    # CI/CD pipelines
-├── infrastructure/       # IaC configurations
-├── kubernetes/          # K8s manifests
-├── scripts/             # Utility scripts
-└── README.md            # Project documentation
-Badges
-
-https://terraform.io/
-https://kubernetes.io/
-https://docker.com/
