@@ -1,11 +1,6 @@
-<<<<<<< HEAD
 # DevOps Portfolio Project
 
-![CI/CD Pipeline](https://img.shields.io/github/actions/workflow/status/<ВАШ_USERNAME>/devops-portfolio/docker-build.yml)
-=======
-# devops-portfolio
-Complete DevOps pipeline with CI/CD, Kubernetes, monitoring and logging
->>>>>>> a19b4a07fecaaad796b1dcce08c2094ffd76b5bb
+![CI/CD Pipeline](https://img.shields.io/github/actions/workflow/status/ctaniclab/devops-portfolio/docker-build.yml)
 
 Complete DevOps pipeline demonstrating:
 
@@ -20,11 +15,7 @@ Complete DevOps pipeline demonstrating:
 
 ```bash
 # Clone repository
-<<<<<<< HEAD
-git clone https://github.com/<ВАШ_USERNAME>/devops-portfolio.git
-=======
 git clone https://github.com/ctaniclab/devops-portfolio.git
->>>>>>> a19b4a07fecaaad796b1dcce08c2094ffd76b5bb
 cd devops-portfolio
 
 # Initialize infrastructure
@@ -35,23 +26,16 @@ terraform apply
 
 # Deploy application
 kubectl apply -f kubernetes/
-<<<<<<< HEAD
 
+Project Structure
+devops-portfolio/
+├── .github/workflows/    # CI/CD pipelines
+├── infrastructure/       # IaC configurations
+├── kubernetes/          # K8s manifests
+├── scripts/             # Utility scripts
+└── README.md            # Project documentation
 
-
-
-
-cat > infrastructure/terraform/main.tf << 'EOF'
-provider "aws" {
-  region = "us-east-1"
-}
-
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-  tags = {
-    Name = "portfolio-vpc"
-  }
-}
-=======
->>>>>>> a19b4a07fecaaad796b1dcce08c2094ffd76b5bb
-# devops-portfolio
+Badges
+Terraform
+Kubernetes
+Docker
