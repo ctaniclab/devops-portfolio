@@ -11,7 +11,7 @@
 
 ## Запуск
 
-**[Скачать MailArchive.exe одним файлом](https://github.com/ctaniclab/devops-portfolio/raw/refs/heads/mail-archive-download/downloads/MailArchive.exe)**
+**[Скачать MailArchive-1.0.1.exe одним файлом](https://github.com/ctaniclab/devops-portfolio/raw/refs/heads/mail-archive-download/downloads/MailArchive-1.0.1.exe)**
 
 Сохраните EXE и запустите его из папки «Загрузки». Распаковка и отдельная установка .NET не нужны.
 

@@ -2,7 +2,7 @@
 
 Версия **1.0.1**: исправлено чтение сжатых OST, пустых тем и устаревших счётчиков. Отчёт можно открыть кнопкой в приложении.
 
-[Скачать MailArchive.exe](https://github.com/ctaniclab/devops-portfolio/raw/refs/heads/mail-archive-download/downloads/MailArchive.exe)
+[Скачать MailArchive-1.0.1.exe](https://github.com/ctaniclab/devops-portfolio/raw/refs/heads/mail-archive-download/downloads/MailArchive-1.0.1.exe)
 
 Сохраните файл и запустите его из папки «Загрузки». Распаковка и установка .NET не нужны.
 
