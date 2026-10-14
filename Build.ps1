@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
     dotnet publish src/MailArchive/MailArchive.csproj -c Release -r $Runtime --self-contained true `
-        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "dist/$Runtime"
+        -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "dist/$Runtime"
     if ($LASTEXITCODE -ne 0) { throw 'Сборка завершилась с ошибкой.' }
     Copy-Item README.md "dist/$Runtime/README.md"
     Copy-Item VERIFICATION.md "dist/$Runtime/VERIFICATION.md"

@@ -13,6 +13,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../vendor/XstReader/*.cs" Link="XstReader/%(Filename)%(Extension)" Nullable="disable" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.1" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
   </ItemGroup>
 </Project>

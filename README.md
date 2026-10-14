@@ -8,6 +8,10 @@
 
 ## Запуск
 
+**[Скачать MailArchive.exe одним файлом](https://github.com/ctaniclab/devops-portfolio/raw/refs/heads/mail-archive-download/downloads/MailArchive.exe)**
+
+Сохраните EXE и запустите его из папки «Загрузки». Распаковка и отдельная установка .NET не нужны.
+
 Распакуйте `MailArchive-win-x64.zip` и запустите `MailArchive.exe`.
 В автономную сборку включён .NET; отдельно устанавливать его не нужно.
 Сборка не подписана цифровым сертификатом.

@@ -8,6 +8,6 @@
     <Compile Include="../../src/MailArchive/ArchiveUtilities.cs" Link="ArchiveUtilities.cs" />
     <Compile Include="../../src/MailArchive/ConversionReport.cs" Link="ConversionReport.cs" />
     <Compile Include="../../src/MailArchive/MessageBodies.cs" Link="MessageBodies.cs" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.1" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
   </ItemGroup>
 </Project>
