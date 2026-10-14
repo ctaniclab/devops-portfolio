@@ -1,0 +1,35 @@
+name: Build Mail Archive
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Download public OST/PST test fixtures
+        shell: pwsh
+        run: ./tests/Get-Fixtures.ps1
+      - name: Check archive reading and file protection
+        shell: pwsh
+        run: dotnet run --project tests/MailArchive.Checks -c Release -- tests/fixtures/example-2013.ost tests/fixtures/dist-list.pst
+      - name: Build Outlook integration check
+        run: dotnet build tests/MailArchive.WindowsChecks -c Release
+      # Hosted runners do not have a configured Outlook profile; do not run Outlook conversion here.
+      - name: Package Windows application
+        shell: pwsh
+        run: ./Build.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MailArchive-win-x64
+          path: dist/MailArchive-win-x64.zip
+          if-no-files-found: error

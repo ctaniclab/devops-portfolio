@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../vendor/XstReader/*.cs" Link="XstReader/%(Filename)%(Extension)" />
+    <Compile Include="../../src/MailArchive/ArchiveUtilities.cs" Link="ArchiveUtilities.cs" />
+    <Compile Include="../../src/MailArchive/ConversionReport.cs" Link="ConversionReport.cs" />
+    <Compile Include="../../src/MailArchive/MessageBodies.cs" Link="MessageBodies.cs" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.1" />
+  </ItemGroup>
+</Project>
