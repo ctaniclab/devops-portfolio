@@ -17,6 +17,23 @@ void Reject(Action action, string name)
     throw new Exception("Expected IOException: " + name);
 }
 
+ReaderRegressionChecks.Run(Check);
+var recoveryReport = new ConversionReport();
+var unreadable = FolderReadPolicy.Read(() => throw new IndexOutOfRangeException("bad table"),
+    () => [], "Входящие", recoveryReport);
+var readable = FolderReadPolicy.Read(() => [new Message { Subject = "Next folder" }],
+    () => [], "Другая папка", recoveryReport);
+Check(unreadable.Count == 0 && readable.Count == 1 && recoveryReport.FolderErrors == 1,
+    "Unreadable folder is reported while following folders remain available");
+Check(recoveryReport.Issues.Single().Stage == "ReadFolder" && recoveryReport.Issues.Single().Details!.Contains("IndexOutOfRangeException"),
+    "Folder failure report retains its stage and exception details");
+FolderReadPolicy.Read(() => [], () => [new ReadIssue("1234", true, "Unreadable header", "details")], "Folder", recoveryReport);
+Check(recoveryReport.Failed == 1 && recoveryReport.Examined == 1, "Lost message header is counted as a failure, not an empty folder");
+int refusedMetadata = 0;
+Check(!MetadataCopy.TrySet("ReceivedTime", () => throw new System.Runtime.InteropServices.COMException("read-only", unchecked((int)0x80070005)),
+        (_, _) => refusedMetadata++) && refusedMetadata == 1,
+    "Outlook read-only metadata is reported without discarding the message");
+
 Check(ArchiveUtilities.HtmlToText("<p>Привет &amp; мир</p><script>alert(1)</script><style>body{}</style><p>Тест</p>")
     == "Привет & мир\nТест", "HTML body text; scripts and styles excluded");
 Check(ArchiveUtilities.HtmlToText(null) == "", "Missing HTML body");
@@ -54,6 +71,17 @@ foreach (var path in args)
     var before = SHA256.HashData(File.ReadAllBytes(path));
     var file = new XstFile(path);
     var root = file.ReadFolderTree();
+    IEnumerable<Folder> AllFolders(Folder folder)
+    {
+        yield return folder;
+        foreach (var child in folder.Folders)
+            foreach (var descendant in AllFolders(child)) yield return descendant;
+    }
+    var populated = AllFolders(root).First(f => f.ContentCount > 0);
+    var headerCount = file.ReadMessages(populated).Count;
+    populated.ContentCount = 0;
+    Check(headerCount > 0 && file.ReadMessages(populated).Count == headerCount,
+        $"{Path.GetExtension(path)} messages remain visible with a stale zero cached count");
     int folders = 0, messages = 0, bodies = 0;
     bool knownBody = false;
     void Visit(Folder folder)

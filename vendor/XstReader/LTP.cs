@@ -476,7 +476,11 @@ namespace XstReader
         private IEnumerable<T> ReadTableData<T>(FileStream fs, TCINFO t, List<HNDataBlock> blocks, List<RowDataBlock> dataBlocks, TCOLDESC[] cols, List<TCOLDESC> colsToGet,
              BTree<Node> subNodeTree, TCROWIDUnicode[] indexes, PropertyGetters<T> g, Action<T, UInt32> idGetter, Action<T, Property> storeProp) where T : new()
         {
-            int rgCEBSize = (int)Math.Ceiling((decimal)t.cCols / 8);
+            // The on-disk row layout defines the bitmap's size, not the number of
+            // currently live columns (which can leave gaps in bitmap bit indexes).
+            int rgCEBSize = t.rgibTCI_bm - t.rgibTCI_1b;
+            if (t.rgibTCI_bm == 0 || rgCEBSize < 0)
+                throw new XstException("Invalid table row/bitmap size");
             int rowsPerBlock;
             if (ndb.IsUnicode4K)
                 rowsPerBlock = (ndb.BlockSize4K - Marshal.SizeOf(typeof(BLOCKTRAILERUnicode4K))) / t.rgibTCI_bm;
@@ -484,6 +488,8 @@ namespace XstReader
                 rowsPerBlock = (ndb.BlockSize - Marshal.SizeOf(typeof(BLOCKTRAILERUnicode))) / t.rgibTCI_bm;
             else
                 rowsPerBlock = (ndb.BlockSize - Marshal.SizeOf(typeof(BLOCKTRAILERANSI))) / t.rgibTCI_bm;
+            if (rowsPerBlock == 0)
+                throw new XstException("Table row exceeds the data block size");
 
             foreach (var index in indexes)
             {
@@ -511,6 +517,8 @@ namespace XstReader
                 foreach (var col in colsToGet)
                 {
                     // Check if the column exists
+                    if (col.iBit / 8 >= rgCEB.Length)
+                        throw new XstException($"Column {col.wPropId} bitmap index {col.iBit} exceeds {rgCEB.Length} bytes");
                     if ((rgCEB[col.iBit / 8] & (0x01 << (7 - (col.iBit % 8)))) == 0)
                         continue;
 
@@ -525,6 +533,8 @@ namespace XstReader
                     foreach (var col in cols)
                     {
                         // Check if the column exists
+                        if (col.iBit / 8 >= rgCEB.Length)
+                            throw new XstException($"Column {col.wPropId} bitmap index {col.iBit} exceeds {rgCEB.Length} bytes");
                         if ((rgCEB[col.iBit / 8] & (0x01 << (7 - (col.iBit % 8)))) == 0)
                             continue;
 
@@ -593,7 +603,7 @@ namespace XstReader
                         {
                             int skip = 0;
                             if (col.wPropId == EpropertyTag.PidTagSubjectW)
-                                if (buf[0] == 0x01 && buf[1] == 0x00)  // Unicode 0x01
+                                if (buf.Length >= 4 && buf[0] == 0x01 && buf[1] == 0x00)  // Unicode 0x01
                                     skip = 4;
                             val = Encoding.Unicode.GetString(buf, skip, buf.Length - skip);
                         }
@@ -620,7 +630,7 @@ namespace XstReader
                             int skip = 0;
 
                             if (col.wPropId == EpropertyTag.PidTagSubjectW)
-                                if (buf[0] == 0x01)  // ANSI 0x01
+                                if (buf.Length >= 2 && buf[0] == 0x01)  // ANSI 0x01
                                     skip = 2;
                             val = Encoding.UTF8.GetString(buf, skip, buf.Length - skip);
                         }
@@ -656,6 +666,7 @@ namespace XstReader
         // This is used when reading the index of properties in a PC (property context), or rows in a TC (table context)
         private IEnumerable<T> ReadBTHIndex<T>(List<HNDataBlock> blocks, HID hid)
         {
+            if (hid.GetIndex(ndb.IsUnicode4K) == 0) yield break;
             var b = MapType<BTHHEADER>(blocks, hid);
             foreach (var row in ReadBTHIndexHelper<T>(blocks, b.hidRoot, b.bIdxLevels))
                 yield return row;
@@ -808,24 +819,43 @@ namespace XstReader
             var index = hid.GetIndex(ndb.IsUnicode4K);
             if (index == 0) // Check for empty
                 return 0;
-            var b = blocks[hid.GetBlockIndex(ndb.IsUnicode4K)];
-            return b.rgibAlloc[index] - b.rgibAlloc[index - 1];
+            var allocation = GetAllocation(blocks, hid);
+            return allocation.Length;
         }
 
         // Dereference the supplied HID in the supplied heap-on-node blocks,
         // and map the resulting data buffer onto the specified type T
         private T MapType<T>(List<HNDataBlock> blocks, HID hid, int offset = 0)
         {
-            var b = blocks[hid.GetBlockIndex(ndb.IsUnicode4K)];
-            return Map.MapType<T>(b.Buffer, b.rgibAlloc[hid.GetIndex(ndb.IsUnicode4K) - 1] + offset);
+            var allocation = GetAllocation(blocks, hid);
+            if (offset < 0 || Marshal.SizeOf<T>() > allocation.Length - offset)
+                throw new XstException($"Heap allocation too small for {typeof(T).Name}");
+            return Map.MapType<T>(allocation.Buffer, allocation.Start + offset);
         }
 
         // Dereference the supplied HID in the supplied heap-on-node blocks,
         // and map the resulting data buffer onto an array of count occurrences of the specified type T
         private T[] MapArray<T>(List<HNDataBlock> blocks, HID hid, int count, int offset = 0)
         {
-            var b = blocks[hid.GetBlockIndex(ndb.IsUnicode4K)];
-            return Map.MapArray<T>(b.Buffer, b.rgibAlloc[hid.GetIndex(ndb.IsUnicode4K) - 1] + offset, count);
+            var allocation = GetAllocation(blocks, hid);
+            if (offset < 0 || count < 0 || (long)count * Marshal.SizeOf<T>() > allocation.Length - offset)
+                throw new XstException($"Heap allocation too small for {count} {typeof(T).Name} entries");
+            return Map.MapArray<T>(allocation.Buffer, allocation.Start + offset, count);
+        }
+
+        private (byte[] Buffer, int Start, int Length) GetAllocation(List<HNDataBlock> blocks, HID hid)
+        {
+            int blockIndex = hid.GetBlockIndex(ndb.IsUnicode4K);
+            int index = hid.GetIndex(ndb.IsUnicode4K);
+            if (blockIndex >= blocks.Count)
+                throw new XstException($"Heap block {blockIndex} is unavailable (blocks: {blocks.Count})");
+            var block = blocks[blockIndex];
+            if (index == 0 || index >= block.rgibAlloc.Length)
+                throw new XstException($"Heap allocation {index} is unavailable in block {blockIndex}");
+            int start = block.rgibAlloc[index - 1], end = block.rgibAlloc[index];
+            if (end < start || end > block.Buffer.Length)
+                throw new XstException($"Invalid heap allocation range {start}..{end} in block {blockIndex}");
+            return (block.Buffer, start, end - start);
         }
         #endregion
     }

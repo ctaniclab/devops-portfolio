@@ -24,6 +24,7 @@ namespace XstReader
 
     public class XstFile
     {
+        public List<ReadIssue> LastReadWarnings { get; } = new List<ReadIssue>();
         private NDB ndb;
         private LTP ltp;
 
@@ -177,22 +178,52 @@ namespace XstReader
         public List<Message> ReadMessages(Folder f)
         {
             f.Messages.Clear();
-            if (f.ContentCount > 0)
+            LastReadWarnings.Clear();
+            // OST cached counters may be zero or stale. The contents table is authoritative.
+            var tableId = NID.TypedNID(EnidType.CONTENTS_TABLE, f.Nid);
+            if (ndb.LookupNode(tableId) == null) return new List<Message>();
+            using (var fs = ndb.GetReadStream())
             {
-                using (var fs = ndb.GetReadStream())
+                List<Message> messages;
+                try
                 {
-                    // Get the Contents table for the folder
-                    // For 4K, not all the properties we want are available in the Contents table, so supplement them from the Message itself
-                    var ms = ltp.ReadTable<Message>(fs, NID.TypedNID(EnidType.CONTENTS_TABLE, f.Nid),
+                    messages = ltp.ReadTable<Message>(fs, tableId,
                                                     ndb.IsUnicode4K ? pgMessageList4K : pgMessageList, (m, id) => m.Nid = new NID(id))
                                 .Select(m => ndb.IsUnicode4K ? Add4KMessageProperties(fs, m) : m)
-                                .Select(m => f.AddMessage(m))
-                                .ToList(); // to force complete execution on the current thread
-                    return ms;
+                                .ToList();
                 }
+                catch (Exception error) when (IsReadError(error))
+                {
+                    // Headers can also be recovered from individual message property contexts.
+                    // Do not lose a whole folder because one optional table column is malformed.
+                    var ids = ltp.ReadTableRowIds(fs, tableId).ToList();
+                    LastReadWarnings.Add(new ReadIssue("", false,
+                        "Contents table could not be read; message headers recovered from row IDs.", error.ToString()));
+                    messages = new List<Message>();
+                    foreach (var id in ids)
+                    {
+                        try
+                        {
+                            var message = new Message { Nid = id };
+                            ltp.ReadProperties<Message>(fs, id, pgMessageList, message);
+                            ltp.ReadProperties<Message>(fs, id, pgMessageDetail4K, message);
+                            messages.Add(message);
+                        }
+                        catch (Exception itemError) when (IsReadError(itemError))
+                        {
+                            LastReadWarnings.Add(new ReadIssue(id.dwValue.ToString("X8"), true,
+                                itemError.Message, itemError.ToString()));
+                        }
+                    }
+                }
+                foreach (var message in messages) f.AddMessage(message);
+                f.ContentCount = (uint)messages.Count;
+                return messages;
             }
-            return new List<Message>();
         }
+
+        private static bool IsReadError(Exception error) => error is XstException || error is IOException || error is InvalidDataException
+            || error is IndexOutOfRangeException || error is ArgumentException || error is OverflowException;
 
         public void ReadMessageDetails(Message m)
         {

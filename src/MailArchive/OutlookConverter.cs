@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
 using XstReader;
 using Message = XstReader.Message;
 
@@ -72,10 +74,14 @@ public static class OutlookConverter
                 CopyFolder(archive, root, importedRoot, report, progress, cancellation);
             }
             cancellation.ThrowIfCancellationRequested();
-            report.Completed = true;
+            report.Completed = report.FolderErrors == 0;
         }
         catch (OperationCanceledException) { report.Cancelled = true; }
-        catch (Exception e) { report.FatalError = e.Message; }
+        catch (Exception e)
+        {
+            report.FatalError = e.Message;
+            report.Issues.Add(new("", "", e.Message, "Fatal", e.ToString()));
+        }
         finally
         {
             if (targetRoot is not null && outlookNamespace is not null)
@@ -100,7 +106,8 @@ public static class OutlookConverter
         report.FinishedUtc = DateTime.UtcNow;
         // Never overwrite an existing report. A cancelled/failed conversion also gets a report.
         using (var stream = new FileStream(reportPath, FileMode.CreateNew, FileAccess.Write))
-            JsonSerializer.Serialize(stream, report, new JsonSerializerOptions { WriteIndented = true });
+            JsonSerializer.Serialize(stream, report, new JsonSerializerOptions
+                { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
         return new ConversionResult(report, reportPath);
     }
 
@@ -108,17 +115,12 @@ public static class OutlookConverter
         ConversionReport report, IProgress<ConversionProgress> progress, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
-        List<Message> messages;
-        try { messages = archive.ReadMessages(source); }
-        catch (Exception e)
-        {
-            // A folder-level failure must not be presented as a complete successful conversion.
-            throw new IOException("Не удалось прочитать папку «" + source.Path + "»: " + e.Message, e);
-        }
+        var messages = FolderReadPolicy.Read(archive, source, report);
         foreach (var message in messages)
         {
             cancellation.ThrowIfCancellationRequested();
             report.Examined++;
+            var stage = "ReadMessage";
             try
             {
                 archive.ReadMessageDetails(message);
@@ -130,18 +132,24 @@ public static class OutlookConverter
                 if (message.Attachments.Any(a => string.Equals(a.FileName, "smime.p7m", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(a.MimeTag, "application/pkcs7-mime", StringComparison.OrdinalIgnoreCase)))
                     throw new UnsupportedMessageException("S/MIME требует отдельной обработки: письмо пропущено.");
-                WriteMessage(archive, message, destination);
+                stage = "WriteMessage";
+                WriteMessage(archive, message, (object)destination, (field, error) =>
+                {
+                    report.MetadataWarnings++;
+                    report.Issues.Add(new(source.Path, message.Subject ?? "",
+                        "Outlook не сохранил поле " + field + ": " + error.Message, "Metadata", error.ToString()));
+                });
                 report.Converted++;
             }
             catch (UnsupportedMessageException e)
             {
                 report.Skipped++;
-                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message));
+                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, "Unsupported"));
             }
             catch (Exception e)
             {
                 report.Failed++;
-                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message));
+                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, stage, e.ToString()));
             }
             finally { message.ClearContents(); message.Properties.Clear(); message.Recipients.Clear(); }
             progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, source.Path));
@@ -152,14 +160,25 @@ public static class OutlookConverter
         {
             cancellation.ThrowIfCancellationRequested();
             using var scope = new ComScope();
-            dynamic folders = scope.Keep(destination.Folders);
-            dynamic childFolder = scope.Keep(folders.Add(string.IsNullOrWhiteSpace(child.Name) ? "Без имени" : child.Name, 6));
+            dynamic childFolder;
+            try
+            {
+                dynamic folders = scope.Keep(destination.Folders);
+                childFolder = scope.Keep(folders.Add(string.IsNullOrWhiteSpace(child.Name) ? "Без имени" : child.Name, 6));
+            }
+            catch (COMException error)
+            {
+                report.FolderErrors++;
+                report.Issues.Add(new(child.Path, "", "Outlook не создал папку: " + error.Message, "CreateFolder", error.ToString()));
+                continue;
+            }
             CopyFolder(archive, child, childFolder, report, progress, cancellation);
         }
     }
 
-    private static void WriteMessage(XstFile archive, Message message, dynamic folder)
+    private static void WriteMessage(XstFile archive, Message message, object target, Action<string, Exception> metadataWarning)
     {
+        dynamic folder = target;
         var temp = Path.Combine(Path.GetTempPath(), "MailArchive-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         using var scope = new ComScope();
@@ -209,15 +228,18 @@ public static class OutlookConverter
             foreach (ushort tag in new ushort[] { 0x0C1A, 0x0C1E, 0x0C1F, 0x0042, 0x0064, 0x0065, 0x1035, 0x007D })
             {
                 var value = ConvertString(message, tag);
-                if (!string.IsNullOrEmpty(value)) properties.SetProperty(Dasl(((uint)tag << 16) | 0x001F), value);
+                if (!string.IsNullOrEmpty(value))
+                    MetadataCopy.TrySet(tag.ToString("X4"), () => properties.SetProperty(Dasl(((uint)tag << 16) | 0x001F), value), metadataWarning);
             }
-            if (message.Received is DateTime received) properties.SetProperty(Dasl(0x0E060040), received.ToUniversalTime());
-            if (message.Submitted is DateTime sent) properties.SetProperty(Dasl(0x00390040), sent.ToUniversalTime());
+            if (message.Received is DateTime received)
+                MetadataCopy.TrySet("ReceivedTime", () => properties.SetProperty(Dasl(0x0E060040), received.ToUniversalTime()), metadataWarning);
+            if (message.Submitted is DateTime sent)
+                MetadataCopy.TrySet("SentOn", () => properties.SetProperty(Dasl(0x00390040), sent.ToUniversalTime()), metadataWarning);
             var originalFlags = message.Properties.FirstOrDefault(p => (ushort)p.Tag == 0x0E07)?.Value;
             int flags = originalFlags is null ? 1 : System.Convert.ToInt32(originalFlags);
-            item.UnRead = (flags & 1) == 0;
+            MetadataCopy.TrySet("UnRead", () => item.UnRead = (flags & 1) == 0, metadataWarning);
             // Set before first Save: preserve read/unsent state without transplanting attachment/store flags.
-            properties.SetProperty(Dasl(0x0E070003), flags & 0x00000009);
+            MetadataCopy.TrySet("MessageFlags", () => properties.SetProperty(Dasl(0x0E070003), flags & 0x00000009), metadataWarning);
             item.Save();
             saved = true;
         }

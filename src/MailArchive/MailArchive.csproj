@@ -9,7 +9,7 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MailArchive</AssemblyName>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../vendor/XstReader/*.cs" Link="XstReader/%(Filename)%(Extension)" Nullable="disable" />

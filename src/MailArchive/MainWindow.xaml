@@ -1,4 +1,4 @@
-<Window x:Class="MailArchive.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Mail Archive — OST / PST" Width="1280" Height="820" MinWidth="960" MinHeight="620" Background="#F3F6FA" Closing="Window_Closing">
+<Window x:Class="MailArchive.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Mail Archive 1.0.1 — OST / PST" Width="1280" Height="820" MinWidth="960" MinHeight="620" Background="#F3F6FA" Closing="Window_Closing">
   <DockPanel Margin="20">
     <StackPanel DockPanel.Dock="Top">
       <TextBlock Text="Mail Archive" FontSize="28" FontWeight="SemiBold" Foreground="#182A43"/>
@@ -7,6 +7,7 @@
         <Button x:Name="OpenButton" Content="Открыть OST / PST…" Click="Open_Click"/>
         <Button x:Name="ConvertButton" Content="OST → PST…" Click="Convert_Click" IsEnabled="False" Background="#225BBD" Foreground="White"/>
         <Button x:Name="CancelButton" Content="Остановить перенос" Click="Cancel_Click" IsEnabled="False"/>
+        <Button x:Name="ReportButton" Content="Открыть отчёт / журнал…" Click="Report_Click" IsEnabled="False"/>
       </WrapPanel>
       <TextBlock x:Name="FileLabel" Text="Откройте файл, чтобы просмотреть папки и письма. Конвертация для просмотра не нужна." Margin="4,10" TextWrapping="Wrap"/>
       <Border Background="#E7EEF9" Padding="10" Margin="0,0,0,12"><TextBlock Text="Исходный файл открывается только для чтения. Работайте с локальной копией архива при закрытом Outlook. Просмотр не загружает внешние изображения и не запускает HTML." TextWrapping="Wrap" Foreground="#344D70"/></Border>

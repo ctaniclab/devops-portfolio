@@ -1,6 +1,6 @@
 namespace MailArchive;
 
-public sealed record ConversionIssue(string Folder, string Subject, string Reason);
+public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null);
 public sealed class ConversionReport
 {
     public string Source { get; set; } = "";
@@ -11,6 +11,8 @@ public sealed class ConversionReport
     public int Converted { get; set; }
     public int Skipped { get; set; }
     public int Failed { get; set; }
+    public int FolderErrors { get; set; }
+    public int MetadataWarnings { get; set; }
     public bool Cancelled { get; set; }
     public bool Completed { get; set; }
     public string? FatalError { get; set; }

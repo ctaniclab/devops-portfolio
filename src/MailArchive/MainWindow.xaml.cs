@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,6 +20,7 @@ public partial class MainWindow : Window
     private FileStream? readGuard;
     private bool busy;
     private CancellationTokenSource? conversion;
+    private string? lastReportPath;
 
     public MainWindow() { InitializeComponent(); }
 
@@ -28,6 +30,7 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true) return;
         SetBusy(true, "Чтение структуры папок…");
         FileStream? guard = null;
+        TreeViewItem? initialFolder = null;
         try
         {
             guard = new FileStream(dialog.FileName, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -38,26 +41,46 @@ public partial class MainWindow : Window
             archive = reader; sourcePath = dialog.FileName;
             currentFolder = null; currentMessage = null;
             Messages.ItemsSource = null; ResetMessage();
+            Search.Clear();
             Folders.Items.Clear();
             var item = MakeFolder(root); item.IsExpanded = true;
             Folders.Items.Add(item);
+            initialFolder = FindAndExpand(item, f => string.Equals(f.Name, "Входящие", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(f.Name, "Inbox", StringComparison.OrdinalIgnoreCase))
+                ?? FindAndExpand(item, f => f.ContentCount > 0) ?? item;
             FileLabel.Text = sourcePath;
             Status.Text = "Архив открыт только для чтения. Выберите папку. Поиск работает в выбранной папке.";
         }
         catch (Exception error) { ShowError(error, "Не удалось открыть архив. Закройте Outlook и используйте отдельную локальную копию OST/PST."); }
         finally { guard?.Dispose(); SetBusy(false); }
+        // Selecting while busy would discard the SelectedItemChanged event.
+        if (initialFolder is not null) initialFolder.IsSelected = true;
     }
 
     private static TreeViewItem MakeFolder(Folder folder)
     {
-        var item = new TreeViewItem { Header = $"{folder.Name ?? "Корень"} ({folder.ContentCount})", Tag = folder, Margin = new Thickness(2) };
+        var name = string.IsNullOrWhiteSpace(folder.Name) ? "Корень" : folder.Name;
+        var item = new TreeViewItem { Header = folder.ContentCount > 0 ? $"{name} ({folder.ContentCount})" : name, Tag = folder, Margin = new Thickness(2) };
         foreach (var child in folder.Folders) item.Items.Add(MakeFolder(child));
         return item;
     }
 
+    private static TreeViewItem? FindAndExpand(TreeViewItem item, Func<Folder, bool> predicate)
+    {
+        if (item.Tag is Folder folder && predicate(folder)) return item;
+        foreach (TreeViewItem child in item.Items)
+        {
+            var result = FindAndExpand(child, predicate);
+            if (result is null) continue;
+            item.IsExpanded = true;
+            return result;
+        }
+        return null;
+    }
+
     private async void Folder_Selected(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        if (busy || archive is null || e.NewValue is not TreeViewItem { Tag: Folder folder }) return;
+        if (busy || archive is null || e.NewValue is not TreeViewItem { Tag: Folder folder } item) return;
         SetBusy(true, "Загрузка писем…");
         try
         {
@@ -66,10 +89,20 @@ public partial class MainWindow : Window
             var headers = await Task.Run(() => archive.ReadMessages(folder));
             Messages.ItemsSource = headers;
             ApplyFilter();
+            Messages.SelectedItem = null;
+            item.Header = $"{(string.IsNullOrWhiteSpace(folder.Name) ? "Корень" : folder.Name)} ({headers.Count})";
             Status.Text = $"{folder.Path} · Писем: {headers.Count}";
+            if (archive.LastReadWarnings.Count > 0)
+            {
+                var skipped = archive.LastReadWarnings.Count(w => w.MessageSkipped);
+                Status.Text += $" · Чтение восстановлено по индексу. Непрочитанных заголовков: {skipped}.";
+                var details = string.Join("\n\n", archive.LastReadWarnings.Select(w => w.NodeId + " " + w.Reason + "\n" + w.Details));
+                SetReport(DiagnosticLog.Write(new IOException(details), "Чтение папки " + folder.Path));
+            }
         }
         catch (Exception error) { Messages.ItemsSource = null; ShowError(error, "Не удалось прочитать папку."); }
         finally { SetBusy(false); }
+        if (Messages.Items.Count > 0) Messages.SelectedIndex = 0;
     }
 
     private async void Message_Selected(object sender, SelectionChangedEventArgs e)
@@ -158,15 +191,17 @@ public partial class MainWindow : Window
                 $"{p.Folder} · Обработано: {p.Examined} · Перенесено: {p.Converted} · Пропущено: {p.Skipped} · Ошибок: {p.Failed}");
             var result = await OutlookConverter.ConvertAsync(sourcePath, dialog.FileName, progress, conversion.Token);
             var r = result.Report;
-            var heading = r.Cancelled ? "Перенос остановлен" : !r.Completed ? "Перенос не завершён"
-                : r.Skipped + r.Failed > 0 ? "Перенос завершён с пропусками или ошибками" : "Перенос писем завершён";
-            var text = $"{heading}.\nПеренесено: {r.Converted}; пропущено: {r.Skipped}; ошибок: {r.Failed}.\n\n"
+            SetReport(result.ReportPath);
+            var heading = r.Cancelled ? "Перенос остановлен" : !r.Completed ? "Перенос выполнен частично"
+                : r.Skipped + r.Failed + r.MetadataWarnings > 0 ? "Перенос завершён с предупреждениями" : "Перенос писем завершён";
+            var text = $"{heading}.\nПеренесено: {r.Converted}; пропущено: {r.Skipped}; ошибок писем: {r.Failed}.\n"
+                + $"Ошибок папок: {r.FolderErrors}; предупреждений метаданных: {r.MetadataWarnings}.\n\n"
                 + (r.Completed ? "PST: " + r.Destination + "\n" : "")
                 + (r.RetainedPartialFile is null ? "" : "Неполный PST: " + r.RetainedPartialFile + "\n")
                 + "Отчёт: " + result.ReportPath + (r.FatalError is null ? "" : "\n\n" + r.FatalError);
-            Status.Text = text;
+            Status.Text = $"{heading}. Перенесено: {r.Converted}. Ошибок писем: {r.Failed}; папок: {r.FolderErrors}. Подробности — «Открыть отчёт / журнал…».";
             MessageBox.Show(this, text, "Результат", MessageBoxButton.OK,
-                r.Completed && r.Skipped + r.Failed == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                r.Completed && r.Skipped + r.Failed + r.MetadataWarnings == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
         catch (Exception error) { ShowError(error, "Не удалось выполнить перенос. Проверьте установку классического Outlook и права на выходную папку."); }
         finally { conversion.Dispose(); conversion = null; CancelButton.IsEnabled = false; SetBusy(false); }
@@ -184,6 +219,7 @@ public partial class MainWindow : Window
         OpenButton.IsEnabled = Folders.IsEnabled = Messages.IsEnabled = Search.IsEnabled = !value;
         ConvertButton.IsEnabled = !value && sourcePath is not null && Path.GetExtension(sourcePath).Equals(".ost", StringComparison.OrdinalIgnoreCase);
         SaveAttachmentButton.IsEnabled = !value && Attachments.SelectedItem is Attachment { IsFile: true };
+        ReportButton.IsEnabled = !value && lastReportPath is not null;
         Progress.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
         Progress.IsIndeterminate = value;
         if (status is not null) Status.Text = status;
@@ -199,8 +235,28 @@ public partial class MainWindow : Window
 
     private void ShowError(Exception error, string context)
     {
+        SetReport(DiagnosticLog.Write(error, context));
         Status.Text = context + " " + error.Message;
         MessageBox.Show(this, Status.Text, "Mail Archive", MessageBoxButton.OK, MessageBoxImage.Error);
+    }
+
+    private void SetReport(string? path)
+    {
+        if (path is null) return;
+        lastReportPath = path;
+        ReportButton.IsEnabled = !busy;
+    }
+
+    private void Report_Click(object sender, RoutedEventArgs e)
+    {
+        if (lastReportPath is null) return;
+        try
+        {
+            var info = new ProcessStartInfo("notepad.exe") { UseShellExecute = false };
+            info.ArgumentList.Add(lastReportPath);
+            Process.Start(info);
+        }
+        catch (Exception error) { MessageBox.Show(this, "Отчёт сохранён: " + lastReportPath + "\n" + error.Message); }
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)

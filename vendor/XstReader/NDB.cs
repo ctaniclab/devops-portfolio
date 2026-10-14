@@ -70,7 +70,7 @@ namespace XstReader
         public DataRef LookupDataBlock(UInt64 dataBid)
         {
             // Clear the LSB, which is reserved, but sometimes set
-            return dataTree.Lookup(dataBid & 0xfffffffe, deferredReadAction);
+            return dataTree.Lookup(dataBid & ~1UL, deferredReadAction);
         }
 
         // Read a sub-node's b-tree from the specified data block
@@ -520,18 +520,20 @@ namespace XstReader
             if (IsUnicode4K && rb.Length != rb.InflatedLength)
             {
                 fs.Seek((long)rb.Offset, SeekOrigin.Begin);
-
-                // The first two bytes are a zlib header which DeflateStream does not understand
-                // They should be 0x789c, the magic code for default compression
-                if (fs.ReadByte() != 0x78 || fs.ReadByte() != 0x9c)
-                    throw new XstException("Unexpected header in compressed data stream");
-
-                using (DeflateStream decompressionStream = new DeflateStream(fs, CompressionMode.Decompress, true))
+                // Bound decoding to this block, including its zlib header and checksum. A single
+                // Read is allowed to return fewer bytes on modern .NET; zero-filled tails corrupt
+                // property counts and heap indexes. ReadExactly must fill the entire inflated block.
+                var stored = new byte[rb.Length];
+                fs.ReadExactly(stored);
+                using (var source = new MemoryStream(stored, writable: false))
+                using (var decompressionStream = new ZLibStream(source, CompressionMode.Decompress))
                 {
                     if (buffer == null)
                         buffer = new byte[rb.InflatedLength];
-
-                    decompressionStream.Read(buffer, offset, rb.InflatedLength);
+                    decompressionStream.ReadExactly(buffer.AsSpan(offset, rb.InflatedLength));
+                    // Force end-of-stream and checksum validation, and reject mismatched lengths.
+                    if (decompressionStream.ReadByte() != -1)
+                        throw new XstException("Inflated OST block exceeds its declared size");
                 }
                 read = rb.InflatedLength;
             }
@@ -540,7 +542,7 @@ namespace XstReader
                 if (buffer == null)
                     buffer = new byte[rb.Length];
                 fs.Seek((long)rb.Offset, SeekOrigin.Begin);
-                fs.Read(buffer, offset, rb.Length);
+                fs.ReadExactly(buffer.AsSpan(offset, rb.Length));
                 read = rb.Length;
             }
 
