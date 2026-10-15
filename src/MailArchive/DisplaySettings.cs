@@ -67,6 +67,7 @@ public sealed class DisplaySettings
         Application.Current.Resources[SystemColors.InactiveSelectionHighlightBrushKey] = Application.Current.Resources["Selection"];
         Application.Current.Resources[SystemColors.InactiveSelectionHighlightTextBrushKey] = Application.Current.Resources["Ink"];
         RenderOptions.ProcessRenderMode = Current.CompatibleRendering ? RenderMode.SoftwareOnly : RenderMode.Default;
+        foreach (Window window in Application.Current.Windows) WindowTheme.Apply(window);
     }
 
     public static string? Save()

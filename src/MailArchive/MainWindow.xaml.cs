@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WindowTheme.Attach(this);
         ThemeChoice.ItemsSource = ThemePalette.Names;
         ThemeChoice.SelectedItem = DisplaySettings.Current.Theme;
         CompatibleRendering.IsChecked = DisplaySettings.Current.CompatibleRendering;
@@ -184,9 +185,9 @@ public partial class MainWindow : Window
         }
         else
         {
-            var dialog = new OpenFolderDialog { Title = "Куда сохранить MSG? Внутри будет создана новая папка", Multiselect = false };
+            var dialog = new OpenFolderDialog { Title = "Куда сохранить MSG? Внутри появится папка с именем архива и исходными папками писем", Multiselect = false };
             if (dialog.ShowDialog(this) != true) return;
-            target = Path.Combine(dialog.FolderName, "MailArchive-MSG-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
+            target = ArchiveUtilities.NewMsgRoot(dialog.FolderName, sourcePath);
         }
         ModeTabs.SelectedIndex = 1;
         conversion = new CancellationTokenSource(); SetBusy(true, "Outlook сохраняет выбранные письма…"); CancelButton.IsEnabled = true;

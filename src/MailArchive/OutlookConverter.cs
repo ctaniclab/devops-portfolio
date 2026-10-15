@@ -69,7 +69,8 @@ public static class OutlookConverter
                 ?? throw new InvalidOperationException("Не найден классический Outlook. Новый Outlook не поддерживает COM. Установите и настройте классический Outlook.");
             dynamic app = session.Keep(Activator.CreateInstance(type)!);
             outlookNamespace = session.Keep(app.GetNamespace("MAPI"));
-            var writer = new MailWriterContext((object)app, (object)outlookNamespace, format, target);
+            var writer = new MailWriterContext((object)app, (object)outlookNamespace, format, target,
+                format == ExportFormat.Msg ? new MsgFolderLayout(root) : null);
             if (format == ExportFormat.Msg)
             {
                 Directory.CreateDirectory(target);
@@ -99,14 +100,9 @@ public static class OutlookConverter
             }
             if (targetRoot is null) throw new IOException("Outlook не подключил созданный PST.");
             targetRoot.Name = Path.GetFileNameWithoutExtension(target);
-            // Keep mail together under one visible folder, without OST service wrappers.
-            using (var scope = new ComScope())
-            {
-                dynamic folders = scope.Keep(targetRoot.Folders);
-                var importedRoot = new Lazy<object>(() => (object)scope.Keep(folders.Add(ExportFolderLayout.ImportFolderName, 6)));
-                CopyFolder(archive, root, () => importedRoot.Value, report, progress, cancellation, writer, selectedIds);
-                PstInventory.Verify(report, importedRoot.IsValueCreated ? OutlookPst.ReadFolderCounts(importedRoot.Value) : []);
-            }
+            // Mail folders sit directly under the named archive, without an extra import wrapper.
+            CopyFolder(archive, root, () => (object)targetRoot, report, progress, cancellation, writer, selectedIds);
+            PstInventory.Verify(report, OutlookPst.ReadFolderCounts((object)targetRoot));
             cancellation.ThrowIfCancellationRequested();
             report.Completed = report.FolderErrors == 0 && report.Failed == 0;
             }
@@ -178,7 +174,15 @@ public static class OutlookConverter
             {
                 dynamic parent = destination();
                 dynamic folders = scope.Keep(parent.Folders);
-                return (object)scope.Keep(folders.Add(ExportFolderLayout.UniqueName(child.Name, destinationNames), 6));
+                var name = ExportFolderLayout.UniqueName(child.Name, destinationNames);
+                for (int i = 1; i <= (int)folders.Count; i++)
+                {
+                    dynamic existing = scope.Keep(folders[i]);
+                    // A new PST may already contain a standard mail folder (e.g. Deleted Items).
+                    if (string.Equals((string)existing.Name, name, StringComparison.OrdinalIgnoreCase) && (int)existing.DefaultItemType == 0)
+                        return (object)existing;
+                }
+                return (object)scope.Keep(folders.Add(name, 6));
             });
             try { CopyFolder(archive, child, () => childFolder.Value, report, progress, cancellation, writer, selectedIds, depth + 1); }
             catch (COMException error)
@@ -213,7 +217,9 @@ public static class OutlookConverter
                 stage = "PrepareBody";
                 var body = PreparedBody.FromMessage(message);
                 stage = "WriteMessage";
-                var msgPath = writer.Format == ExportFormat.Msg ? Path.Combine(writer.Target, ArchiveUtilities.MsgFileName(message.Subject, source.Nid.dwValue, message.Nid.dwValue)) : null;
+                stage = "CreateOutputFolder";
+                var msgPath = writer.Format == ExportFormat.Msg
+                    ? Path.Combine(writer.MsgFolders!.EnsureDirectory(writer.Target, source), ArchiveUtilities.MsgFileName(message.Subject, source.Nid.dwValue, message.Nid.dwValue)) : null;
                 WriteMessage(archive, message, writer.Format == ExportFormat.Pst ? target() : null, body, writer, msgPath, (field, error) =>
                 {
                     report.MetadataWarnings++;
@@ -240,7 +246,7 @@ public static class OutlookConverter
         }
     }
 
-    private sealed record MailWriterContext(object App, object Session, ExportFormat Format, string Target);
+    private sealed record MailWriterContext(object App, object Session, ExportFormat Format, string Target, MsgFolderLayout? MsgFolders);
 
     private static void WriteMessage(XstFile archive, Message message, object? target, PreparedBody body, MailWriterContext writer, string? msgPath,
         Action<string, Exception> metadataWarning, Action<string> stage)
@@ -250,7 +256,9 @@ public static class OutlookConverter
         using var scope = new ComScope();
         dynamic? item = null;
         dynamic? reopened = null;
-        var standalonePath = msgPath ?? Path.Combine(temp, "message.msg");
+        // Outlook SaveAs does not reliably support long nested destination paths.
+        // Write in a short private directory; publish verified MSG bytes with .NET after closing COM.
+        var standalonePath = Path.Combine(temp, "message.msg");
         try
         {
             stage("CreateMessage");
@@ -346,6 +354,13 @@ public static class OutlookConverter
                     value => (object)scope.Keep(value), stage);
                 reopened = imported;
                 Verify(imported, "VerifyPstContent");
+            }
+            else if (msgPath is not null)
+            {
+                reopened.Close(1); reopened = null;
+                scope.Dispose();
+                stage("PublishMsgFile");
+                File.Move(standalonePath, msgPath, overwrite: false);
             }
         }
         finally

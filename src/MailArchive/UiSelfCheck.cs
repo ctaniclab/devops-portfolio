@@ -86,7 +86,7 @@ public static class UiSelfCheck
         DisplaySettings.SuppressPersistence = true;
         DisplaySettings.Current.Theme = "Светлая"; DisplaySettings.Current.CompatibleRendering = true; DisplaySettings.Apply();
         MainWindow? main = null; MessageWindow? reader = null;
-        bool mainVerified = false, readerVerified = false, scrollbarsVerified = false, htmlVerified = false, wizardVerified = false;
+        bool mainVerified = false, readerVerified = false, scrollbarsVerified = false, htmlVerified = false, wizardVerified = false, captionVerified = false;
         var verifiedThemes = new List<string>();
         string? error = null; int exit = 1;
         try
@@ -111,11 +111,13 @@ public static class UiSelfCheck
                 VerifyTextContrast((Button)main.FindName("ReadMessageButton"));
                 VerifyTextContrast((CheckBox)main.FindName("ShowServiceFolders"));
                 VerifyTextContrast((ComboBox)main.FindName("ThemeChoice"));
+                if (!WindowTheme.IsApplied(main)) throw new IOException("Native window caption did not follow theme: " + theme);
                 if (((DataGrid)main.FindName("Messages")).Items.Count != messageCount) throw new IOException("Theme switch changed the loaded mailbox.");
                 if (extraThemes.TryGetValue(theme, out var filename)) Capture(main, output + "." + filename + ".png");
                 verifiedThemes.Add(theme);
             }
             ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
+            captionVerified = true;
             var message = new Message { Subject = "Тест чтения письма", From = "Демонстрация интерфейса", BodyHtml = "<table><tr><td>Тест письма</td></tr></table><p><b>Форматирование и кириллица</b></p><script>document.body.innerText='unsafe'</script>" + string.Concat(Enumerable.Range(1, 45).Select(i => "<p>Демонстрационный текст письма " + i + "</p>")) };
             reader = new MessageWindow(null, message) { Owner = main, Width = 820, Height = 640 };
             var view = (Microsoft.Web.WebView2.Wpf.WebView2)reader.FindName("HtmlPreview");
@@ -126,6 +128,7 @@ public static class UiSelfCheck
                 if (e.IsSuccess) navigated.TrySetResult(); else navigated.TrySetException(new IOException("Reader navigation failed: " + e.WebErrorStatus));
             };
             reader.Show(); await reader.Ready.Task.WaitAsync(TimeSpan.FromSeconds(45)); await navigated.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            if (!WindowTheme.IsApplied(reader)) throw new IOException("Reader caption did not follow the active theme.");
             if (JsonSerializer.Deserialize<string>(await view.CoreWebView2.ExecuteScriptAsync("document.querySelector('table td').textContent")) != "Тест письма"
                 || view.CoreWebView2.Settings.IsScriptEnabled || await view.CoreWebView2.ExecuteScriptAsync("document.scripts.length") != "0") throw new IOException("Reader HTML content/script checks failed.");
             htmlVerified = true;
@@ -163,6 +166,7 @@ public static class UiSelfCheck
                     await wizard.Dispatcher.InvokeAsync(wizard.UpdateLayout, DispatcherPriority.ApplicationIdle);
                     VerifyTextContrast((RadioButton)wizard.FindName("PstChoice"));
                     VerifyTextContrast((RadioButton)wizard.FindName("MsgChoice"));
+                    if (!WindowTheme.IsApplied(wizard)) throw new IOException("Export wizard caption did not follow theme: " + theme);
                 }
                 ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
                 Capture(wizard, output + ".wizard.png");
@@ -177,6 +181,7 @@ public static class UiSelfCheck
             File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.4.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
                 HtmlRenderingVerified = htmlVerified, ThemedScrollBarsVerified = scrollbarsVerified, ExportWizardVerified = wizardVerified,
                 ThemesVerified = verifiedThemes, AllThemesVerified = verifiedThemes.Count == ThemePalette.Names.Count,
+                NativeCaptionVerified = captionVerified,
                 HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
             Application.Current.Shutdown(exit);
         }

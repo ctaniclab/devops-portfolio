@@ -4,8 +4,6 @@ namespace MailArchive;
 
 public static class ExportFolderLayout
 {
-    public const string ImportFolderName = "Перенесённая почта";
-
     public static bool IsServiceBranch(Folder folder, int parentDepth)
     {
         if (parentDepth > 2) return false;

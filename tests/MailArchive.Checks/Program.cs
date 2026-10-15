@@ -23,6 +23,7 @@ ExportChecks.Run(Check);
 ContentChecks.Run(Check);
 TransferChecks.Run(Check);
 ThemeChecks.Run(Check);
+FolderLayoutChecks.Run(Check);
 var recoveryReport = new ConversionReport();
 var unreadable = FolderReadPolicy.Read(() => throw new IndexOutOfRangeException("bad table"),
     () => [], "Входящие", recoveryReport);

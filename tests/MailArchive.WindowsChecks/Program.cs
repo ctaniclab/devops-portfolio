@@ -86,6 +86,14 @@ async Task RunPassAsync(string outputPath)
         new Progress<ConversionProgress>(), CancellationToken.None, selections: batch, format: ExportFormat.Msg);
     if (!msgs.Report.Completed || msgs.Report.Converted != 2 || msgs.Report.ContentVerified != 2 || msgs.Report.MsgFiles.Count != 2)
         throw new Exception("Batch MSG conversion failed: " + msgs.ReportPath);
+    var expectedMsgLayout = new MsgFolderLayout(sourceRoot);
+    var expectedMsgPaths = batch.Select(s =>
+    {
+        var sourceFolder = s.ResolveFolder(sourceRoot);
+        var header = s.ResolveMessage(sourceArchive.ReadMessages(sourceFolder));
+        return Path.Combine(expectedMsgLayout.PathFor(msgs.Report.Destination, sourceFolder), ArchiveUtilities.MsgFileName(header.Subject, s.FolderId, s.MessageId));
+    }).Order().ToArray();
+    if (!msgs.Report.MsgFiles.Order().SequenceEqual(expectedMsgPaths)) throw new Exception("MSG source-folder structure was not preserved.");
     foreach (var output in msgs.Report.MsgFiles)
     {
         using var stream = File.OpenRead(output);
@@ -96,6 +104,8 @@ async Task RunPassAsync(string outputPath)
 
     var selectedPst = await OutlookConverter.ConvertAsync(Path.GetFullPath(args[0]), outputPath + ".selected.pst",
         new Progress<ConversionProgress>(), CancellationToken.None, selections: batch);
+    if (selectedPst.Report.OutputFolders.Any(f => f.Path.Split('\\').Contains("Перенесённая почта")))
+        throw new Exception("Unnecessary import wrapper remained in the PST.");
     if (!selectedPst.Report.Completed || selectedPst.Report.Converted != 2 || selectedPst.Report.ContentVerified != 2
         || selectedPst.Report.OutputMessagesVerified != 2 || !selectedPst.Report.OutlookReadBackVerified)
         throw new Exception("Two-message PST import failed: " + selectedPst.ReportPath);

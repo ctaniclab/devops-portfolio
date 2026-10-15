@@ -23,6 +23,7 @@ public partial class MessageWindow : Window
     {
         this.archive = archive; this.message = message;
         InitializeComponent(); preview = new MailPreview(HtmlPreview);
+        WindowTheme.Attach(this);
         Loaded += Reader_Loaded;
     }
     private async void Reader_Loaded(object sender, RoutedEventArgs e)

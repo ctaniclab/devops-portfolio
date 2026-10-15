@@ -34,7 +34,7 @@ public partial class ExportWizard : Window
     public ExportWizard(string source, bool includeService, MessageSelection? preselected = null)
     {
         this.source = source; this.includeService = includeService; this.preselected = preselected;
-        InitializeComponent(); Loaded += Wizard_Loaded;
+        InitializeComponent(); WindowTheme.Attach(this); Loaded += Wizard_Loaded;
     }
     private async void Wizard_Loaded(object sender, RoutedEventArgs e)
     {

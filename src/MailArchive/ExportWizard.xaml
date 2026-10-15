@@ -17,7 +17,7 @@
       <Border x:Name="FormatStep" Style="{StaticResource Card}" Visibility="Collapsed"><StackPanel>
         <RadioButton x:Name="PstChoice" Content="PST — один архив для Outlook" IsChecked="True" FontSize="18" FontWeight="SemiBold" Margin="6,12"/>
         <TextBlock Text="Все отмеченные сообщения и вложения будут сохранены в одном новом PST. Папки с выбранной почтой сохраняются." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="30,0,12,24"/>
-        <RadioButton x:Name="MsgChoice" Content="MSG — отдельный файл для каждого письма" FontSize="18" FontWeight="SemiBold" Margin="6,12"/>
+        <RadioButton x:Name="MsgChoice" Content="MSG — файлы писем в исходных папках архива" FontSize="18" FontWeight="SemiBold" Margin="6,12"/>
         <TextBlock Text="Выберите папку на компьютере. Внутри будет создана новая папка с файлами .msg. Одинаковые темы писем не приводят к перезаписи." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="30,0,12,24"/>
         <TextBlock Text="Оба формата создаются через установленный классический Outlook. Для каждого результата проверяются тема, текст, получатели и файловые вложения." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="6,12"/>
       </StackPanel></Border>

@@ -4,6 +4,24 @@ using System.Text.RegularExpressions;
 namespace MailArchive;
 public static class ArchiveUtilities
 {
+    public static string SafeDirectoryName(string? original)
+    {
+        var name = Regex.Replace(original ?? "", "[<>:\"/\\\\|?*\\x00-\\x1f]", "_").Trim(' ', '.');
+        if (name.Length == 0) name = "Без имени";
+        if (Regex.IsMatch(name.Split('.')[0], @"^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$", RegexOptions.IgnoreCase)) name = "_" + name;
+        if (name.Length > 80) name = name[..80];
+        if (char.IsHighSurrogate(name[^1])) name = name[..^1];
+        return name.TrimEnd(' ', '.');
+    }
+
+    public static string NewMsgRoot(string parent, string source)
+    {
+        var basename = SafeDirectoryName(Path.GetFileNameWithoutExtension(source));
+        var candidate = Path.Combine(parent, basename);
+        for (int suffix = 2; Directory.Exists(candidate) || File.Exists(candidate); suffix++) candidate = Path.Combine(parent, $"{basename} ({suffix})");
+        return candidate;
+    }
+
     public static string MsgFileName(string? subject, uint folderId, uint messageId) =>
         SafeAttachmentName(string.IsNullOrWhiteSpace(subject) ? "Без темы" : subject) + $"-{folderId:X8}-{messageId:X8}.msg";
 
