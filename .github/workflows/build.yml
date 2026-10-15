@@ -45,12 +45,14 @@ jobs:
             throw 'Published EXE self-check failed.'
           }
           $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified -or -not $result.ReaderWindowVerified -or -not $result.ThemedScrollBarsVerified -or -not $result.ExportWizardVerified -or -not $result.AllThemesVerified -or -not $result.NativeCaptionVerified) { throw 'Email HTML rendering or application UI was not verified.' }
+          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified -or -not $result.ReaderWindowVerified -or -not $result.ThemedScrollBarsVerified -or -not $result.ExportWizardVerified -or -not $result.AllThemesVerified -or -not $result.NativeCaptionApiAccepted -or -not $result.NativeDarkModeVerified) { throw 'Email HTML rendering or application UI was not verified.' }
           Copy-Item $report dist/preview-report.json
           Copy-Item "$report.png" dist/ui-preview.png
           Copy-Item "$report.dark.png" dist/ui-dark.png
           Copy-Item "$report.reader.png" dist/ui-reader.png
           Copy-Item "$report.wizard.png" dist/ui-export-wizard.png
+          Copy-Item "$report.classic.window.png" dist/ui-classic-window.png
+          Copy-Item "$report.space.window.png" dist/ui-space-window.png
           foreach ($theme in @('classic', 'glass', 'space', 'ocean')) { Copy-Item "$report.$theme.png" "dist/ui-$theme.png" }
       - name: Prepare release assets
         shell: pwsh
@@ -75,6 +77,8 @@ jobs:
             dist/ui-glass.png
             dist/ui-space.png
             dist/ui-ocean.png
+            dist/ui-classic-window.png
+            dist/ui-space-window.png
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -91,6 +95,8 @@ jobs:
             dist/ui-glass.png
             dist/ui-space.png
             dist/ui-ocean.png
+            dist/ui-classic-window.png
+            dist/ui-space-window.png
           if-no-files-found: ignore
 
   release:
