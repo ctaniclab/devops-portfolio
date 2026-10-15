@@ -38,7 +38,12 @@ jobs:
           $report = Join-Path $env:RUNNER_TEMP 'mailarchive-preview.json'
           $process = Start-Process (Resolve-Path dist/win-x64/MailArchive.exe).Path -ArgumentList @('--self-check-output', $report) -PassThru
           if (-not $process.WaitForExit(90000)) { $process.Kill(); throw 'Published EXE self-check timed out.' }
-          if ($process.ExitCode -ne 0) { if (Test-Path $report) { Get-Content $report }; throw 'Published EXE self-check failed.' }
+          if (Test-Path $report) { Copy-Item $report dist/preview-report.json }
+          if ($process.ExitCode -ne 0) {
+            $detail = if (Test-Path $report) { (Get-Content $report -Raw | ConvertFrom-Json).Error } else { 'No report was written.' }
+            Write-Output "::error title=Published EXE preview check failed::$detail"
+            throw 'Published EXE self-check failed.'
+          }
           $result = Get-Content $report -Raw | ConvertFrom-Json
           if (-not $result.HtmlRenderingVerified) { throw 'Email HTML rendering was not verified.' }
           Copy-Item $report dist/preview-report.json
