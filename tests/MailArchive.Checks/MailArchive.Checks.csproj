@@ -21,6 +21,9 @@
     <Compile Include="../../src/MailArchive/OutlookMessageTransfer.cs" Link="OutlookMessageTransfer.cs" />
     <Compile Include="../../src/MailArchive/ConversionEstimate.cs" Link="ConversionEstimate.cs" />
     <Compile Include="../../src/MailArchive/MsgDateMetadata.cs" Link="MsgDateMetadata.cs" />
+    <Compile Include="../../src/MailArchive/StandaloneMsg.cs" Link="StandaloneMsg.cs" />
+    <Compile Include="../../src/MailArchive/CfbEmptyStreams.cs" Link="CfbEmptyStreams.cs" />
+    <Compile Include="../../src/MailArchive/OutlookConnection.cs" Link="OutlookConnection.cs" />
     <Compile Include="../../src/MailArchive/SavedMailDates.cs" Link="SavedMailDates.cs" />
     <Compile Include="../../src/MailArchive/ThemePalette.cs" Link="ThemePalette.cs" />
     <Compile Include="../../src/MailArchive/MsgFolderLayout.cs" Link="MsgFolderLayout.cs" />

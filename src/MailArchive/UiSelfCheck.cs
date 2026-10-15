@@ -89,7 +89,7 @@ public static class UiSelfCheck
         bool mainVerified = false, readerVerified = false, scrollbarsVerified = false, htmlVerified = false, wizardVerified = false, captionVerified = false;
         var verifiedThemes = new List<string>();
         var backdrops = new Dictionary<string, WindowTheme.BackdropState>();
-        bool glassFallbackVerified = false, progressUiVerified = false, iconVerified = false;
+        bool glassFallbackVerified = false, progressUiVerified = false, iconVerified = false, glassPanelsVerified = false, disabledTreeVerified = false, tabBoundsVerified = false, offlineMsgVerified = false;
         string? error = null; int exit = 1;
         try
         {
@@ -130,12 +130,45 @@ public static class UiSelfCheck
                 backdrops[theme] = WindowTheme.BackdropFor(main);
                 if (expectedPalette.NativeGlass && backdrops[theme].HResult != 0) throw new IOException("Windows backdrop API failed: " + backdrops[theme]);
                 if (((DataGrid)main.FindName("Messages")).Items.Count != messageCount) throw new IOException("Theme switch changed the loaded mailbox.");
+                var tree = (TreeView)main.FindName("Folders"); tree.IsEnabled = false; tree.ApplyTemplate();
+                var chrome = (Border)tree.Template.FindName("TreeChrome", tree);
+                if (chrome.Background is not SolidColorBrush { Color.A: 0 } || !Equals(tree.Foreground, Application.Current.Resources["Ink"]))
+                    throw new IOException("Disabled folder tree acquired a system background or foreground: " + theme);
+                await main.Dispatcher.InvokeAsync(main.UpdateLayout, DispatcherPriority.ApplicationIdle);
+                if (expectedPalette.NativeGlass)
+                {
+                    var fill = (Brush)Application.Current.Resources["PanelFill"];
+                    bool transparent = fill is SolidColorBrush solid ? solid.Color.A <= 112
+                        : fill is GradientBrush gradient && gradient.GradientStops.All(stop => stop.Color.A <= 112);
+                    if (!transparent || ((SolidColorBrush)Application.Current.Resources["Field"]).Color.A > 80)
+                        throw new IOException("Opaque panel or field hides the native glass backdrop: " + theme);
+                }
+                var tabs = (TabControl)main.FindName("ModeTabs");
+                var headerPanel = Descendants<TabPanel>(tabs).First();
+                foreach (TabItem tab in tabs.Items)
+                {
+                    tab.ApplyTemplate();
+                    var tabChrome = (Border)tab.Template.FindName("Chrome", tab);
+                    var bounds = tabChrome.TransformToAncestor(headerPanel).TransformBounds(new Rect(tabChrome.RenderSize));
+                    if (bounds.Top < -.5 || bounds.Bottom > headerPanel.ActualHeight + .5)
+                        throw new IOException("Tab capsule is clipped by the native tab header: " + theme);
+                }
                 if (extraThemes.TryGetValue(theme, out var filename))
                 {
                     Capture(main, output + "." + filename + ".png");
                     NativeWindowCapture.Save(main, output + "." + filename + ".window.png");
                 }
+                tree.IsEnabled = true;
                 verifiedThemes.Add(theme);
+            }
+            glassPanelsVerified = disabledTreeVerified = tabBoundsVerified = true;
+            if (fixture is not null)
+            {
+                var msgDirectory = output + ".msg-export";
+                var result = await OutlookConverter.ConvertAsync(fixture, msgDirectory, new Progress<ConversionProgress>(), CancellationToken.None, format: ExportFormat.Msg);
+                if (!result.Report.Completed || result.Report.Converted == 0 || !result.Report.MsgReadBackVerified || result.Report.OutlookReadBackVerified)
+                    throw new IOException("MSG export without Outlook failed: " + result.Report.FatalError + "; " + string.Join("; ", result.Report.Issues.Select(i => i.Reason)));
+                offlineMsgVerified = true;
             }
             ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
             captionVerified = true;
@@ -220,12 +253,13 @@ public static class UiSelfCheck
         finally
         {
             reader?.Close(); main?.Close();
-            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.5.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
+            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.6.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
                 HtmlRenderingVerified = htmlVerified, ThemedScrollBarsVerified = scrollbarsVerified, ExportWizardVerified = wizardVerified,
                 ThemesVerified = verifiedThemes, AllThemesVerified = verifiedThemes.Count == ThemePalette.Names.Count,
                 NativeCaptionApiAccepted = captionVerified, NativeDarkModeVerified = captionVerified,
                 NativeCaptionColorReadBackAvailable = false,
                 GlassFallbackVerified = glassFallbackVerified, ConversionProgressUiVerified = progressUiVerified, Backdrops = backdrops, ExecutableIconVerified = iconVerified,
+                GlassPanelsVerified = glassPanelsVerified, DisabledTreeVerified = disabledTreeVerified, TabBoundsVerified = tabBoundsVerified, OfflineMsgExportVerified = offlineMsgVerified,
                 HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
             Application.Current.Shutdown(exit);
         }

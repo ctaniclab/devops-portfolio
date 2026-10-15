@@ -13,7 +13,7 @@ internal static class ThemeArtwork
     {
         var art = new DrawingGroup { ClipGeometry = new RectangleGeometry(new Rect(0, 0, 1400, 900)) };
         var background = new LinearGradientBrush(Color(palette.Colors[0]), Color(palette.GradientEnd ?? palette.Colors[0]), 35);
-        if (translucent) background.Opacity = palette.Dark ? .12 : .16;
+        if (translucent) background.Opacity = .06;
         art.Children.Add(new GeometryDrawing(background, null, new RectangleGeometry(new Rect(0, 0, 1400, 900))));
         void Path(string data, string fill) => art.Children.Add(new GeometryDrawing(Brush(fill), null, Geometry.Parse(data)));
         void Stroke(string data, string color, double width) => art.Children.Add(new GeometryDrawing(null, new Pen(Brush(color), width), Geometry.Parse(data)));
@@ -27,11 +27,7 @@ internal static class ThemeArtwork
                         new EllipseGeometry(new Point((i * 137 + 31) % 1400, (i * 251 + 19) % 900), i % 4 == 0 ? 1.5 : .7, i % 4 == 0 ? 1.5 : .7)));
                 break;
             case ThemeScene.Liquid:
-                Orb(230, 190, 420, "#6D88D5FF", "#0088D5FF"); Orb(1100, 650, 500, "#5FBA9EF2", "#00BA9EF2");
-                Stroke("M -160 720 C 200 850 80 80 590 100 C 980 120 550 750 1100 650 C 1450 600 1320 260 1550 220", "#3566B5F0", 135);
-                Stroke("M -160 720 C 200 850 80 80 590 100 C 980 120 550 750 1100 650 C 1450 600 1320 260 1550 220", "#85F3FAFF", 3);
-                Stroke("M -80 730 C 450 1010 330 120 690 180 C 1030 250 710 750 1200 780 C 1420 790 1380 450 1540 420", "#437D8DE2", 90);
-                Stroke("M -80 730 C 450 1010 330 120 690 180 C 1030 250 710 750 1200 780 C 1420 790 1380 450 1540 420", "#85FFFFFF", 2);
+                Orb(230, 190, 420, "#2288D5FF", "#0088D5FF"); Orb(1100, 650, 500, "#20BA9EF2", "#00BA9EF2");
                 break;
             case ThemeScene.Ocean:
                 Orb(1100, 50, 650, "#AA12A9BD", "#0012A9BD");
@@ -79,12 +75,13 @@ internal static class ThemeArtwork
 
     public static Brush Panel(ThemePalette palette)
     {
+        if (palette.NativeGlass && palette.Dark) return Brush("#38132540");
         if (palette.Scene != ThemeScene.Liquid) return Brush(palette.Colors[1]);
         var fill = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(.65, 1) };
-        fill.GradientStops.Add(new(Color("#F5FFFFFF"), 0));
-        fill.GradientStops.Add(new(Color("#CFFFFFFF"), .25));
-        fill.GradientStops.Add(new(Color("#D5F5FAFF"), .75));
-        fill.GradientStops.Add(new(Color("#EEFFFFFF"), 1));
+        fill.GradientStops.Add(new(Color("#70FFFFFF"), 0));
+        fill.GradientStops.Add(new(Color("#28FFFFFF"), .25));
+        fill.GradientStops.Add(new(Color("#22F5FAFF"), .75));
+        fill.GradientStops.Add(new(Color("#48FFFFFF"), 1));
         fill.Freeze(); return fill;
     }
 }

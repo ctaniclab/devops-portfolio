@@ -4,7 +4,7 @@ public sealed record PstFolderInfo(string Path, int Messages);
 public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null, string? ItemClass = null, string? ErrorCode = null);
 public sealed class ConversionReport
 {
-    public string AppVersion { get; set; } = "1.5.0";
+    public string AppVersion { get; set; } = "1.6.0";
     public string Mode { get; set; } = "Mailbox";
     public MessageSelection? Selection { get; set; }
     public List<MessageSelection>? Selections { get; set; }
@@ -29,6 +29,7 @@ public sealed class ConversionReport
     public List<string> ExcludedServiceFolders { get; set; } = [];
     public int? OutputMessagesVerified { get; set; }
     public bool OutlookReadBackVerified { get; set; }
+    public bool MsgReadBackVerified { get; set; }
     public List<PstFolderInfo> OutputFolders { get; set; } = [];
     public bool Cancelled { get; set; }
     public bool Completed { get; set; }

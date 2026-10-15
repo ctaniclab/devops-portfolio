@@ -213,7 +213,7 @@ public partial class MainWindow : Window
             target = ArchiveUtilities.NewMsgRoot(dialog.FolderName, sourcePath);
         }
         ModeTabs.SelectedIndex = 1;
-        conversion = new CancellationTokenSource(); SetBusy(true, "Outlook сохраняет выбранные письма…"); CancelButton.IsEnabled = true;
+        conversion = new CancellationTokenSource(); SetBusy(true, wizard.Format == ExportFormat.Msg ? "Сохраняются выбранные MSG…" : "Outlook сохраняет выбранные письма в PST. Не закрывайте Outlook до завершения."); CancelButton.IsEnabled = true;
         conversionEstimate = new(); conversionWatch.Restart();
         lastConversionProgress = new(0, 0, 0, 0, "", wizard.Selected.Distinct().Count());
         conversionTicker.Start(); UpdateConversionTiming();

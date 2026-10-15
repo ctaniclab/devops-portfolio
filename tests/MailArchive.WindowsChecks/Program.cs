@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Runtime.InteropServices;
 using MailArchive;
 using XstReader;
 
@@ -18,6 +19,7 @@ for (int pass = 1; pass <= 3; pass++)
 
 async Task RunPassAsync(string outputPath)
 {
+    var accountBefore = await AccountSnapshotAsync();
     var before = SHA256.HashData(File.ReadAllBytes(args[0]));
     var result = await OutlookConverter.ConvertAsync(Path.GetFullPath(args[0]), Path.GetFullPath(outputPath),
         new Progress<ConversionProgress>(), CancellationToken.None);
@@ -117,4 +119,38 @@ async Task RunPassAsync(string outputPath)
     if (!subjects.SequenceEqual(expectedSubjects)) throw new Exception("Independent PST reader found different selected messages.");
     if (!before.SequenceEqual(SHA256.HashData(File.ReadAllBytes(args[0])))) throw new Exception("Source changed after repeated conversions.");
     Console.WriteLine("PASS: two selected letters imported into PST; independent reader confirms their subjects; source unchanged.");
+    if (!accountBefore.SetEquals(await AccountSnapshotAsync()))
+        throw new Exception("Default account Outbox/Drafts/Sent/Deleted folders changed during conversion. Use an isolated idle test profile to exclude unrelated mail activity.");
+    Console.WriteLine("PASS: default-account folder EntryIDs unchanged after PST and MSG conversion.");
+}
+
+static Task<HashSet<string>> AccountSnapshotAsync()
+{
+    var completion = new TaskCompletionSource<HashSet<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var thread = new Thread(() =>
+    {
+        var handles = new List<object>();
+        dynamic Keep(object value) { handles.Add(value); return value; }
+        try
+        {
+            dynamic app = Keep(Activator.CreateInstance(Type.GetTypeFromProgID("Outlook.Application")!)!);
+            dynamic session = Keep(app.GetNamespace("MAPI"));
+            var snapshot = new HashSet<string>(StringComparer.Ordinal);
+            foreach (int kind in new[] { 4, 16, 5, 3 }) // Outbox, Drafts, Sent, Deleted
+            {
+                dynamic folder = Keep(session.GetDefaultFolder(kind));
+                dynamic items = Keep(folder.Items);
+                for (int i = 1; i <= (int)items.Count; i++)
+                {
+                    dynamic item = items[i];
+                    try { snapshot.Add(kind + ":" + (string)folder.StoreID + ":" + (string)item.EntryID); }
+                    finally { Marshal.ReleaseComObject(item); }
+                }
+            }
+            completion.SetResult(snapshot);
+        }
+        catch (Exception error) { completion.SetException(error); }
+        finally { foreach (var handle in handles.AsEnumerable().Reverse()) Marshal.ReleaseComObject(handle); }
+    });
+    thread.SetApartmentState(ApartmentState.STA); thread.Start(); return completion.Task;
 }
