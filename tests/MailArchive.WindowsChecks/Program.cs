@@ -23,6 +23,8 @@ async Task RunPassAsync(string outputPath)
         new Progress<ConversionProgress>(), CancellationToken.None);
     if (!result.Report.Completed || result.Report.Converted == 0 || result.Report.Failed != 0)
         throw new Exception("Outlook conversion failed. Inspect report: " + result.ReportPath);
+    if (result.Report.DatesVerified + result.Report.MessagesWithoutSourceDates != result.Report.Converted)
+        throw new Exception("Original message dates were not accounted for.");
     if (!result.Report.OutlookReadBackVerified || result.Report.OutputMessagesVerified != result.Report.Converted)
         throw new Exception("Saved Outlook folder counts were not verified.");
     if (result.Report.OutputFolders.Any(f => f.Path.Contains("\\IPM_SUBTREE\\", StringComparison.OrdinalIgnoreCase)))

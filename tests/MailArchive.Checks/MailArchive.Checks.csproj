@@ -20,10 +20,13 @@
     <Compile Include="../../src/MailArchive/ArchiveOutline.cs" Link="ArchiveOutline.cs" />
     <Compile Include="../../src/MailArchive/OutlookMessageTransfer.cs" Link="OutlookMessageTransfer.cs" />
     <Compile Include="../../src/MailArchive/ConversionEstimate.cs" Link="ConversionEstimate.cs" />
+    <Compile Include="../../src/MailArchive/MsgDateMetadata.cs" Link="MsgDateMetadata.cs" />
+    <Compile Include="../../src/MailArchive/SavedMailDates.cs" Link="SavedMailDates.cs" />
     <Compile Include="../../src/MailArchive/ThemePalette.cs" Link="ThemePalette.cs" />
     <Compile Include="../../src/MailArchive/MsgFolderLayout.cs" Link="MsgFolderLayout.cs" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
     <PackageReference Include="RtfPipe" Version="2.0.7677.4303" />
+    <PackageReference Include="OpenMcdf" Version="3.3.0" />
     <PackageReference Include="AngleSharp" Version="1.8.4" />
   </ItemGroup>
 </Project>

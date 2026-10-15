@@ -24,6 +24,7 @@ ContentChecks.Run(Check);
 TransferChecks.Run(Check);
 ThemeChecks.Run(Check);
 TimingChecks.Run(Check);
+DateMetadataChecks.Run(Check);
 FolderLayoutChecks.Run(Check);
 var recoveryReport = new ConversionReport();
 var unreadable = FolderReadPolicy.Read(() => throw new IndexOutOfRangeException("bad table"),

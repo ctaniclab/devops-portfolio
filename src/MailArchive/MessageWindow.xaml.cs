@@ -38,7 +38,7 @@ public partial class MessageWindow : Window
             SenderText.Text = "От: " + (message.From ?? "не указан") + (string.IsNullOrEmpty(address) || address == message.From ? "" : " <" + address + ">");
             string Names(RecipientType type) => string.Join("; ", message.Recipients.Where(r => r.RecipientType == type)
                 .Select(r => string.IsNullOrEmpty(r.EmailAddress) || r.EmailAddress == r.DisplayName ? r.DisplayName : r.DisplayName + " <" + r.EmailAddress + ">"));
-            HeaderDetails.Text = $"Кому: {Names(RecipientType.To)}\nКопия: {Names(RecipientType.Cc)}\nСкрытая копия: {Names(RecipientType.Bcc)}\nПолучено: {message.Received:g}\nОтправлено: {message.Submitted:g}";
+            HeaderDetails.Text = $"Кому: {Names(RecipientType.To)}\nКопия: {Names(RecipientType.Cc)}\nСкрытая копия: {Names(RecipientType.Bcc)}\nПолучено: {message.Received?.ToLocalTime():g}\nОтправлено: {message.Submitted?.ToLocalTime():g}";
             body = await Task.Run(() => PreparedBody.FromMessage(message));
             BodyText.Text = body.Text.Length == 0 ? "Текстовое содержимое отсутствует в локальном архиве." : body.Text;
             HtmlText.Text = body.Html; MessageProperties.ItemsSource = message.Properties; Attachments.ItemsSource = message.Attachments;

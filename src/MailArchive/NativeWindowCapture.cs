@@ -18,6 +18,10 @@ internal static class NativeWindowCapture
     [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr value);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr value);
     [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "ExtractIconExW")]
+    private static extern uint ExtractIconEx(string file, int index, IntPtr large, IntPtr small, uint count);
+
+    public static bool HasExecutableIcon(string file) => ExtractIconEx(file, -1, IntPtr.Zero, IntPtr.Zero, 0) > 0;
 
     public static void Save(Window window, string path)
     {

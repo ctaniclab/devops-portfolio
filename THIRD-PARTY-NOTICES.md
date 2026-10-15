@@ -18,3 +18,8 @@ AngleSharp 1.8.4 (MIT): https://github.com/AngleSharp/AngleSharp.
 RtfPipe 2.0.7677.4303 (MIT): https://github.com/erdomke/RtfPipe.
 Microsoft.Web.WebView2 SDK 1.0.4258.31: Microsoft license; runtime installed separately.
 License/notice texts: vendor/licenses/.
+
+OpenMcdf 3.3.0, Copyright © 2010–2026 Federico Blaseotto, Jeremy Powell (MPL-2.0).
+Unmodified library used to update fixed properties in our temporary MSG files.
+Corresponding source: https://github.com/openmcdf/openmcdf/tree/11b5d876cdebb472f1845dfa55e9e9b953aed65f
+Full license: vendor/licenses/LICENSE-OPENMCDF-MPL-2.0.txt (also included in release licenses/).

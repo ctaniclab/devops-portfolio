@@ -231,6 +231,8 @@ public static class OutlookConverter
                 }, nextStage => stage = nextStage);
                 report.Converted++;
                 report.ContentVerified++;
+                if (message.Received is not null || message.Submitted is not null) report.DatesVerified++;
+                else report.MessagesWithoutSourceDates++;
                 if (msgPath is not null) report.MsgFiles.Add(msgPath);
                 if (body.ConvertedFromRtf) report.RtfBodiesConvertedToHtml++;
             }
@@ -257,6 +259,7 @@ public static class OutlookConverter
         var temp = Path.Combine(Path.GetTempPath(), "MailArchive-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         using var scope = new ComScope();
+        using var writerScope = new ComScope();
         dynamic? item = null;
         dynamic? reopened = null;
         // Outlook SaveAs does not reliably support long nested destination paths.
@@ -266,25 +269,25 @@ public static class OutlookConverter
         {
             stage("CreateMessage");
             dynamic app = writer.App;
-            item = scope.Keep(app.CreateItem(0)); // transient; never Save to the user's default Drafts
+            item = writerScope.Keep(app.CreateItem(0)); // transient; never Save to the user's default Drafts
             stage("WriteBody");
             item.Subject = message.Subject ?? "";
             body.WriteTo(format => item.BodyFormat = format, html => item.HTMLBody = html);
 
             stage("WriteRecipients");
-            dynamic recipients = scope.Keep(item.Recipients);
+            dynamic recipients = writerScope.Keep(item.Recipients);
             int expectedRecipients = 0;
             foreach (var recipient in message.Recipients.Where(r => (int)r.RecipientType is >= 1 and <= 3))
             {
                 var address = recipient.EmailAddress ?? recipient.DisplayName;
                 if (string.IsNullOrWhiteSpace(address)) continue;
-                dynamic entry = scope.Keep(recipients.Add(address));
+                dynamic entry = writerScope.Keep(recipients.Add(address));
                 entry.Type = (int)recipient.RecipientType;
                 expectedRecipients++;
                 // No ResolveAll: Exchange may be unavailable; original address remains in the recipient row.
             }
             stage("WriteAttachments");
-            dynamic attachments = scope.Keep(item.Attachments);
+            dynamic attachments = writerScope.Keep(item.Attachments);
             int number = 0;
             var expectedHashes = new List<string>();
             foreach (var attachment in message.Attachments)
@@ -295,10 +298,10 @@ public static class OutlookConverter
                 var path = Path.Combine(directory, ArchiveUtilities.SafeAttachmentName(attachment.FileName));
                 archive.SaveAttachment(path, null, attachment);
                 using (var input = File.OpenRead(path)) expectedHashes.Add(System.Convert.ToHexString(SHA256.HashData(input)));
-                dynamic added = scope.Keep(attachments.Add(path, 1, Type.Missing, attachment.FileName ?? "attachment"));
+                dynamic added = writerScope.Keep(attachments.Add(path, 1, Type.Missing, attachment.FileName ?? "attachment"));
                 if (!string.IsNullOrEmpty(attachment.ContentId))
                 {
-                    dynamic attachmentProperties = scope.Keep(added.PropertyAccessor);
+                    dynamic attachmentProperties = writerScope.Keep(added.PropertyAccessor);
                     attachmentProperties.SetProperty(Dasl(0x3712001F), attachment.ContentId);
                     attachmentProperties.SetProperty(Dasl(0x7FFE000B), attachment.Hidden);
                 }
@@ -307,7 +310,7 @@ public static class OutlookConverter
             using (new FileStream(standalonePath, FileMode.CreateNew, FileAccess.Write)) { }
             item.SaveAs(standalonePath, 9); // Same proven Unicode MSG path for BOTH formats.
             stage("WriteMetadata");
-            dynamic properties = scope.Keep(item.PropertyAccessor);
+            dynamic properties = writerScope.Keep(item.PropertyAccessor);
             // Whitelist only common mail metadata. Never copy store-specific entry IDs or arbitrary properties.
             foreach (ushort tag in new ushort[] { 0x0C1A, 0x0C1E, 0x0C1F, 0x0042, 0x0064, 0x0065, 0x1035 })
             {
@@ -315,19 +318,19 @@ public static class OutlookConverter
                 if (!string.IsNullOrEmpty(value))
                     MetadataCopy.TrySet(tag.ToString("X4"), () => properties.SetProperty(Dasl(((uint)tag << 16) | 0x001F), value), metadataWarning);
             }
-            if (message.Received is DateTime received)
-                MetadataCopy.TrySet("ReceivedTime", () => properties.SetProperty(Dasl(0x0E060040), received.ToUniversalTime()), metadataWarning);
-            if (message.Submitted is DateTime sent)
-                MetadataCopy.TrySet("SentOn", () => properties.SetProperty(Dasl(0x00390040), sent.ToUniversalTime()), metadataWarning);
             var originalFlags = message.Properties.FirstOrDefault(p => (ushort)p.Tag == 0x0E07)?.Value;
             int flags = originalFlags is null ? 1 : System.Convert.ToInt32(originalFlags);
-            MetadataCopy.TrySet("UnRead", () => item.UnRead = (flags & 1) == 0, metadataWarning);
-            // Reassert core fields after optional MAPI setters. Never transplant lifecycle flags.
+            // Reassert core fields after optional MAPI setters. Lifecycle state is restored only in the closed MSG, never on a pending MailItem.
             item.Subject = message.Subject ?? "";
             body.WriteTo(format => item.BodyFormat = format, html => item.HTMLBody = html);
             stage("SaveStandaloneMsg");
             item.SaveAs(standalonePath, 9);
-            item.Close(1); // release the writer before opening its file
+            item.Close(1); writerScope.Dispose(); item = null;
+            // Release every writer RCW/file handle before editing the closed MSG's fixed metadata.
+            stage("RestoreOriginalDates");
+            var dates = new SavedMailDates(message.Received?.ToUniversalTime(), message.Submitted?.ToUniversalTime());
+            DateTime? PropertyTime(ushort tag) => message.Properties.FirstOrDefault(p => (ushort)p.Tag == tag)?.Value is DateTime value ? value.ToUniversalTime() : null;
+            MsgDateMetadata.Restore(standalonePath, dates, flags, PropertyTime(0x3007), PropertyTime(0x3008));
             dynamic mapinamespace = writer.Session;
             stage("ReopenStandaloneMsg");
             reopened = scope.Keep(mapinamespace.OpenSharedItem(standalonePath));
@@ -349,6 +352,18 @@ public static class OutlookConverter
                 }
                 dynamic savedRecipients = checkScope.Keep(mail.Recipients);
                 expected.Verify(new((string?)mail.Subject ?? "", (string?)mail.HTMLBody ?? "", (string?)mail.Body ?? "", (int)savedRecipients.Count, actualHashes));
+                stage(verificationStage == "VerifyPstContent" ? "VerifyPstDates" : "VerifyMsgDates");
+                dynamic dateProperties = checkScope.Keep(mail.PropertyAccessor);
+                dates.Verify(tag =>
+                {
+                    try
+                    {
+                        // PropertyAccessor PT_SYSTIME returns a UTC DATE (COM Kind is Unspecified).
+                        object value = dateProperties.GetProperty(Dasl(tag));
+                        return value is DateTime date ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : null;
+                    }
+                    catch (COMException e) when (e.HResult == unchecked((int)0x8004010F)) { return null; }
+                });
             }
             Verify((object)reopened, "VerifyMsgContent");
             if (target is not null)
@@ -373,7 +388,7 @@ public static class OutlookConverter
                 try { item.Close(1); } catch { /* Best effort discard of unsaved item. */ }
             }
             if (reopened is not null) { try { reopened.Close(1); } catch { } }
-            scope.Dispose();
+            writerScope.Dispose(); scope.Dispose();
             try { Directory.Delete(temp, recursive: true); } catch { /* No source files are ever removed. */ }
         }
     }

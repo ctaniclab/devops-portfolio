@@ -89,11 +89,21 @@ public static class UiSelfCheck
         bool mainVerified = false, readerVerified = false, scrollbarsVerified = false, htmlVerified = false, wizardVerified = false, captionVerified = false;
         var verifiedThemes = new List<string>();
         var backdrops = new Dictionary<string, WindowTheme.BackdropState>();
-        bool glassFallbackVerified = false, progressUiVerified = false;
+        bool glassFallbackVerified = false, progressUiVerified = false, iconVerified = false;
         string? error = null; int exit = 1;
         try
         {
             main = new MainWindow { Width = 1000, Height = 680 }; main.Show();
+            using (var iconStream = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app-icon.ico")).Stream)
+            using (var iconHeader = new BinaryReader(iconStream))
+            {
+                if (iconHeader.ReadUInt16() != 0 || iconHeader.ReadUInt16() != 1 || iconHeader.ReadUInt16() < 7
+                    || main.Icon is null || !NativeWindowCapture.HasExecutableIcon(Environment.ProcessPath!))
+                    throw new IOException("Selected multi-resolution icon was not embedded in the window and published EXE.");
+                iconVerified = true;
+            }
+            if (!LicenseInfo.Text.Contains("Mozilla Public License Version 2.0") || !LicenseInfo.Text.Contains("11b5d876cdebb472f1845dfa55e9e9b953aed65f"))
+                throw new IOException("Standalone EXE is missing its OpenMcdf license or corresponding-source notice.");
             await main.Dispatcher.InvokeAsync(main.UpdateLayout, DispatcherPriority.ApplicationIdle);
             var open = (Button)main.FindName("OpenButton"); open.ApplyTemplate();
             if (((Border)open.Template.FindName("Chrome", open)).CornerRadius.TopLeft != ThemePalette.Get("Светлая").ButtonRadius
@@ -215,7 +225,7 @@ public static class UiSelfCheck
                 ThemesVerified = verifiedThemes, AllThemesVerified = verifiedThemes.Count == ThemePalette.Names.Count,
                 NativeCaptionApiAccepted = captionVerified, NativeDarkModeVerified = captionVerified,
                 NativeCaptionColorReadBackAvailable = false,
-                GlassFallbackVerified = glassFallbackVerified, ConversionProgressUiVerified = progressUiVerified, Backdrops = backdrops,
+                GlassFallbackVerified = glassFallbackVerified, ConversionProgressUiVerified = progressUiVerified, Backdrops = backdrops, ExecutableIconVerified = iconVerified,
                 HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
             Application.Current.Shutdown(exit);
         }

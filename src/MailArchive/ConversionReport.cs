@@ -23,6 +23,8 @@ public sealed class ConversionReport
     public int MetadataWarnings { get; set; }
     public int RtfBodiesConvertedToHtml { get; set; }
     public int ContentVerified { get; set; }
+    public int DatesVerified { get; set; }
+    public int MessagesWithoutSourceDates { get; set; }
     public bool IncludeServiceFolders { get; set; }
     public List<string> ExcludedServiceFolders { get; set; } = [];
     public int? OutputMessagesVerified { get; set; }
@@ -39,6 +41,6 @@ public sealed class ConversionReport
         "В OST доступны только локально сохранённые данные. Отсутствующие на диске письма и вложения восстановить нельзя.",
         "Письма с вложенными сообщениями, OLE/ссылочными вложениями и S/MIME пропускаются с записью в отчёт.",
         "RTF переводится в HTML с сохранением доступного форматирования; вёрстка может отличаться от Outlook. Исходник остаётся в OST."
-        ,"Служебные транспортные заголовки и исходный флаг отправленного/неотправленного письма не перезаписываются через PropertyAccessor. Outlook может показывать восстановленное письмо как черновик; приложение ничего не отправляет."
+        ,"Даты отправки и получения и состояние черновика восстанавливаются в закрытом временном MSG. Транспортные флаги очереди отправки и уведомлений не копируются. Приложение ничего не отправляет."
     ];
 }
