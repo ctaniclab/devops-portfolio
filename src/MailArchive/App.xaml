@@ -1,4 +1,4 @@
-<Application x:Class="MailArchive.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" StartupUri="MainWindow.xaml">
+<Application x:Class="MailArchive.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Application.Resources>
     <Style TargetType="Button"><Setter Property="Padding" Value="16,8"/><Setter Property="Margin" Value="4"/><Setter Property="Background" Value="#EDF2F8"/><Setter Property="BorderBrush" Value="#CAD4E2"/></Style>
     <Style TargetType="TextBox"><Setter Property="Padding" Value="8"/><Setter Property="BorderBrush" Value="#CAD4E2"/></Style>

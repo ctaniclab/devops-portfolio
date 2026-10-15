@@ -41,7 +41,7 @@ jobs:
           if (Test-Path $report) { Copy-Item $report dist/preview-report.json }
           if ($process.ExitCode -ne 0) {
             $detail = if (Test-Path $report) { (Get-Content $report -Raw | ConvertFrom-Json).Error } else { 'No report was written.' }
-            Write-Output "::error title=Published EXE preview check failed::$detail"
+            Write-Output "::error title=Published EXE preview check failed::Exit code $($process.ExitCode): $detail"
             throw 'Published EXE self-check failed.'
           }
           $result = Get-Content $report -Raw | ConvertFrom-Json

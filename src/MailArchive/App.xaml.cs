@@ -11,14 +11,14 @@ public partial class App : Application
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         if (e.Args is ["--self-check-output", var output])
         {
-            StartupUri = null;
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            var view = new WebView2();
-            var window = new Window { Width = 640, Height = 400, Content = view, Title = "Mail Archive — проверка просмотра" };
+            Window? window = null;
             int exitCode = 1;
             string? error = null;
             try
             {
+                var view = new WebView2();
+                window = new Window { Width = 640, Height = 400, Content = view, Title = "Mail Archive — проверка просмотра" };
                 window.Show();
                 await PreviewSelfCheck.VerifyAsync(view).WaitAsync(TimeSpan.FromSeconds(45));
                 exitCode = 0;
@@ -28,11 +28,12 @@ public partial class App : Application
             {
                 try { File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.1.0", HtmlRenderingVerified = exitCode == 0, Error = error })); }
                 catch { exitCode = 1; }
-                window.Close();
+                window?.Close();
                 Shutdown(exitCode);
             }
             return;
         }
+        StartupUri = new Uri("MainWindow.xaml", UriKind.Relative);
         base.OnStartup(e);
     }
 }
