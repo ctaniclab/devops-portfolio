@@ -124,6 +124,7 @@ public partial class MainWindow : Window
             var messages = await Task.Run(() => archive.ReadMessages(folder));
             Messages.ItemsSource = messages; ApplyFilter();
             FolderCaption.Text = $"{folder.Name} · Элементов: {messages.Count}. Двойной щелчок открывает письмо.";
+            Status.Text = messages.Count == 0 ? "Папка пуста. Выберите другую папку." : $"Найдено сообщений: {messages.Count}. Выберите письмо и нажмите «Читать письмо».";
             item.Header = new TextBlock { Text = $"{folder.Name} ({messages.Count})" };
             if (archive.LastReadWarnings.Count > 0)
                 SetReport(DiagnosticLog.Write(new IOException(string.Join("\n", archive.LastReadWarnings.Select(w => w.Reason))), "Чтение списка писем"));

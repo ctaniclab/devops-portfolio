@@ -41,6 +41,10 @@ public sealed class DisplaySettings
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
             brush.Freeze(); Application.Current.Resources[names[i]] = brush;
         }
+        Application.Current.Resources[SystemColors.HighlightBrushKey] = Application.Current.Resources["Selection"];
+        Application.Current.Resources[SystemColors.HighlightTextBrushKey] = Application.Current.Resources["Ink"];
+        Application.Current.Resources[SystemColors.InactiveSelectionHighlightBrushKey] = Application.Current.Resources["Selection"];
+        Application.Current.Resources[SystemColors.InactiveSelectionHighlightTextBrushKey] = Application.Current.Resources["Ink"];
         RenderOptions.ProcessRenderMode = Current.CompatibleRendering ? RenderMode.SoftwareOnly : RenderMode.Default;
     }
 

@@ -12,6 +12,18 @@ namespace MailArchive;
 
 public static class UiSelfCheck
 {
+    private static void VerifyTextContrast(Control control)
+    {
+        double Luminance(Color color)
+        {
+            double Channel(byte value) { double v = value / 255d; return v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4); }
+            return 0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B);
+        }
+        var foreground = Luminance(((SolidColorBrush)control.Foreground).Color);
+        var background = Luminance(((SolidColorBrush)Application.Current.Resources["Surface"]).Color);
+        if ((Math.Max(foreground, background) + 0.05) / (Math.Min(foreground, background) + 0.05) < 4.5)
+            throw new IOException("Format control text has insufficient contrast in the active theme.");
+    }
     private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
     {
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
@@ -130,6 +142,8 @@ public static class UiSelfCheck
                 ((Button)wizard.FindName("NextButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 if (((Border)wizard.FindName("FormatStep")).Visibility != Visibility.Visible || wizard.Selected.Count != rows.Count) throw new IOException("Select-all did not advance to format choice with every message.");
                 ((RadioButton)wizard.FindName("MsgChoice")).IsChecked = true;
+                VerifyTextContrast((RadioButton)wizard.FindName("PstChoice"));
+                VerifyTextContrast((RadioButton)wizard.FindName("MsgChoice"));
                 Capture(wizard, output + ".wizard.png");
                 wizard.Close(); wizardVerified = true;
             }
@@ -139,7 +153,7 @@ public static class UiSelfCheck
         finally
         {
             reader?.Close(); main?.Close();
-            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.3.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
+            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.3.1", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
                 HtmlRenderingVerified = htmlVerified, ThemedScrollBarsVerified = scrollbarsVerified, ExportWizardVerified = wizardVerified,
                 HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
             Application.Current.Shutdown(exit);

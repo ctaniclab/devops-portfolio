@@ -108,6 +108,13 @@
         <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Mark" Property="Visibility" Value="Visible"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
+    <Style TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
+        <DockPanel><Border Width="19" Height="19" Margin="0,0,9,0" CornerRadius="10" BorderBrush="{DynamicResource MutedInk}" BorderThickness="1.5" Background="{DynamicResource Field}" VerticalAlignment="Center"><Ellipse x:Name="Dot" Fill="{DynamicResource Accent}" Margin="4" Visibility="Collapsed"/></Border><ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/></DockPanel>
+        <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Dot" Property="Visibility" Value="Visible"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="Foreground" Value="{DynamicResource Ink}"/></Trigger></ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style TargetType="DataGrid">
       <Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="{DynamicResource Surface}"/>
       <Setter Property="RowBackground" Value="{DynamicResource Surface}"/><Setter Property="AlternatingRowBackground" Value="{DynamicResource Field}"/>
@@ -118,6 +125,17 @@
     <Style TargetType="DataGridCell"><Setter Property="Padding" Value="8,6"/><Setter Property="BorderThickness" Value="0"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource Selection}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/></Trigger></Style.Triggers></Style>
     <Style TargetType="TreeView"><Setter Property="Background" Value="{DynamicResource Surface}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="BorderThickness" Value="0"/></Style>
     <Style TargetType="TreeViewItem"><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Padding" Value="3,4"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style>
-    <Style TargetType="Expander"><Setter Property="Foreground" Value="{DynamicResource Ink}"/></Style>
+    <Style TargetType="Expander">
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
+        <StackPanel>
+          <ToggleButton Content="{TemplateBinding Header}" Foreground="{DynamicResource Ink}" HorizontalContentAlignment="Left" IsChecked="{Binding IsExpanded,Mode=TwoWay,RelativeSource={RelativeSource TemplatedParent}}">
+            <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" Padding="0,5"><DockPanel><Path x:Name="Arrow" Data="M 0 0 L 5 5 L 0 10" Stroke="{DynamicResource MutedInk}" StrokeThickness="1.5" Width="10" Height="12" Margin="3,0,8,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/><ContentPresenter RecognizesAccessKey="True" VerticalAlignment="Center"/></DockPanel></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+          </ToggleButton>
+          <ContentPresenter x:Name="ExpandedContent" ContentSource="Content" Visibility="Collapsed"/>
+        </StackPanel>
+        <ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="ExpandedContent" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
   </Application.Resources>
 </Application>

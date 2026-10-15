@@ -54,14 +54,14 @@ jobs:
       - name: Prepare release assets
         shell: pwsh
         run: |
-          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.3.0.exe
-          (Get-FileHash dist/MailArchive-1.3.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.3.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.3.0.exe.sha256
+          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.3.1.exe
+          (Get-FileHash dist/MailArchive-1.3.1.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.3.1.exe' | Set-Content -Encoding ascii dist/MailArchive-1.3.1.exe.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: MailArchive-1.3.0-verified
+          name: MailArchive-1.3.1-verified
           path: |
-            dist/MailArchive-1.3.0.exe
-            dist/MailArchive-1.3.0.exe.sha256
+            dist/MailArchive-1.3.1.exe
+            dist/MailArchive-1.3.1.exe.sha256
             dist/MailArchive-win-x64.zip
             dist/defender-report.json
             dist/defender-report.json.txt
@@ -93,7 +93,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: MailArchive-1.3.0-verified
+          name: MailArchive-1.3.1-verified
           path: release
       - name: Publish only after tests, preview and Defender passed
         env:
@@ -101,8 +101,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          if gh release view v1.3.0 >/dev/null 2>&1; then
-            echo 'Version v1.3.0 already exists; existing assets will not be overwritten.'
+          if gh release view v1.3.1 >/dev/null 2>&1; then
+            echo 'Version v1.3.1 already exists; existing assets will not be overwritten.'
             exit 0
           fi
-          gh release create v1.3.0 --target '${{ github.sha }}' --title 'Mail Archive 1.3.0' --notes 'Multiple-message selection and PST/Unicode MSG format wizard, separate reading window, light/dark themes, sRGB software rendering compatibility, rounded scrollbars, removal of empty export folders, and content-level Outlook read-back verification. Real HDR monitor behavior and Outlook automation are not validated on hosted CI. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*
+          gh release create v1.3.1 --target '${{ github.sha }}' --title 'Mail Archive 1.3.1' --notes 'Multiple-message selection and PST/Unicode MSG format wizard, separate reading window, light/dark themes, sRGB software rendering compatibility, rounded scrollbars, removal of empty export folders, and content-level Outlook read-back verification. Real HDR monitor behavior and Outlook automation are not validated on hosted CI. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*
