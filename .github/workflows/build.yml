@@ -1,0 +1,99 @@
+name: Build Mail Archive
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Download public OST/PST test fixtures
+        shell: pwsh
+        run: ./tests/Get-Fixtures.ps1
+      - name: Check archive reading and file protection
+        shell: pwsh
+        run: dotnet run --project tests/MailArchive.Checks -c Release -- tests/fixtures/example-2013.ost tests/fixtures/dist-list.pst
+      - name: Build Outlook integration check
+        run: dotnet build tests/MailArchive.WindowsChecks -c Release
+      # Hosted runners do not have a configured Outlook profile; do not run Outlook conversion here.
+      - name: Package Windows application
+        shell: pwsh
+        run: ./Build.ps1
+      - name: Scan release with Microsoft Defender
+        shell: pwsh
+        run: ./scripts/Scan-Defender.ps1 -ScanPath dist/win-x64 -ReportPath dist/defender-report.json
+      - name: Verify HTML preview in the published EXE
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'mailarchive-preview.json'
+          $process = Start-Process (Resolve-Path dist/win-x64/MailArchive.exe).Path -ArgumentList @('--self-check-output', $report) -PassThru
+          if (-not $process.WaitForExit(90000)) { $process.Kill(); throw 'Published EXE self-check timed out.' }
+          if (Test-Path $report) { Copy-Item $report dist/preview-report.json }
+          if ($process.ExitCode -ne 0) {
+            $detail = if (Test-Path $report) { (Get-Content $report -Raw | ConvertFrom-Json).Error } else { 'No report was written.' }
+            Write-Output "::error title=Published EXE preview check failed::Exit code $($process.ExitCode): $detail"
+            throw 'Published EXE self-check failed.'
+          }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified) { throw 'Email HTML rendering or application UI was not verified.' }
+          Copy-Item $report dist/preview-report.json
+          Copy-Item "$report.png" dist/ui-preview.png
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.2.1.exe
+          (Get-FileHash dist/MailArchive-1.2.1.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.2.1.exe' | Set-Content -Encoding ascii dist/MailArchive-1.2.1.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MailArchive-1.2.1-verified
+          path: |
+            dist/MailArchive-1.2.1.exe
+            dist/MailArchive-1.2.1.exe.sha256
+            dist/MailArchive-win-x64.zip
+            dist/defender-report.json
+            dist/defender-report.json.txt
+            dist/preview-report.json
+            dist/ui-preview.png
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: MailArchive-check-failure
+          path: |
+            dist/defender-report.json*
+            dist/preview-report.json
+            dist/ui-preview.png
+          if-no-files-found: ignore
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/mail-archive-download'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MailArchive-1.2.1-verified
+          path: release
+      - name: Publish only after tests, preview and Defender passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if gh release view v1.2.1 >/dev/null 2>&1; then
+            echo 'Version v1.2.1 already exists; existing assets will not be overwritten.'
+            exit 0
+          fi
+          gh release create v1.2.1 --target '${{ github.sha }}' --title 'Mail Archive 1.2.1' --notes 'Rounded interface and archive artwork, visible exported mailbox folders, verified saved-message counts, direct opening of the first populated PST folder in Outlook, and clear explanations for skipped contacts. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*
