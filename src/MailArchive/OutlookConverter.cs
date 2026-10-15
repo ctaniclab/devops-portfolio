@@ -14,12 +14,12 @@ public sealed record ConversionResult(ConversionReport Report, string ReportPath
 public static class OutlookConverter
 {
     public static Task<ConversionResult> ConvertAsync(string source, string target,
-        IProgress<ConversionProgress> progress, CancellationToken cancellation)
+        IProgress<ConversionProgress> progress, CancellationToken cancellation, MessageSelection? selection = null)
     {
         var completion = new TaskCompletionSource<ConversionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
-            try { completion.SetResult(Convert(source, target, progress, cancellation)); }
+            try { completion.SetResult(Convert(source, target, progress, cancellation, selection)); }
             catch (Exception e) { completion.SetException(e); }
         }) { IsBackground = true, Name = "Outlook PST writer" };
         thread.SetApartmentState(ApartmentState.STA);
@@ -28,14 +28,13 @@ public static class OutlookConverter
     }
 
     private static ConversionResult Convert(string source, string target,
-        IProgress<ConversionProgress> progress, CancellationToken cancellation)
+        IProgress<ConversionProgress> progress, CancellationToken cancellation, MessageSelection? selection)
     {
         ArchiveUtilities.ValidateDestination(source, target);
         var id = Guid.NewGuid().ToString("N");
-        var partial = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(target))!,
-            Path.GetFileNameWithoutExtension(target) + "." + id + ".partial.pst");
         var reportPath = target + "." + id + ".conversion.json";
-        var report = new ConversionReport { Source = source, Destination = target };
+        var report = new ConversionReport { Source = source, Destination = target,
+            Mode = selection is null ? "Mailbox" : "SelectedMessage", Selection = selection };
         using var session = new ComScope();
         dynamic? outlookNamespace = null;
         dynamic? targetRoot = null;
@@ -52,13 +51,16 @@ public static class OutlookConverter
             dynamic app = session.Keep(Activator.CreateInstance(type)!);
             outlookNamespace = session.Keep(app.GetNamespace("MAPI"));
             // 2 = olStoreUnicode. Do not Logon/Logoff or Quit the user's Outlook session.
-            outlookNamespace.AddStoreEx(partial, 2);
+            // Use the requested NEW pathname from the start. Outlook can retain OS handles even
+            // after RemoveStore; renaming the saved PST was the fatal error in the user's report.
+            ArchiveUtilities.ValidateDestination(source, target);
+            outlookNamespace.AddStoreEx(Path.GetFullPath(target), 2);
             dynamic stores = session.Keep(outlookNamespace.Stores);
             for (int index = 1; index <= (int)stores.Count; index++)
             {
                 using var scope = new ComScope();
                 dynamic store = scope.Keep(stores[index]);
-                if (string.Equals((string)store.FilePath, partial, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals((string)store.FilePath, Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase))
                 {
                     targetRoot = session.Keep(store.GetRootFolder());
                     break;
@@ -71,7 +73,13 @@ public static class OutlookConverter
             {
                 dynamic folders = scope.Keep(targetRoot.Folders);
                 dynamic importedRoot = scope.Keep(folders.Add("Импорт OST", 6)); // olFolderInbox = mail folder
-                CopyFolder(archive, root, importedRoot, report, progress, cancellation);
+                if (selection is null) CopyFolder(archive, root, importedRoot, report, progress, cancellation);
+                else
+                {
+                    var selectedFolder = selection.ResolveFolder(root);
+                    var selectedMessage = selection.ResolveMessage(archive.ReadMessages(selectedFolder));
+                    CopyMessages(archive, selectedFolder, (object)importedRoot, [selectedMessage], report, progress, cancellation);
+                }
             }
             cancellation.ThrowIfCancellationRequested();
             report.Completed = report.FolderErrors == 0;
@@ -97,12 +105,7 @@ public static class OutlookConverter
             session.Dispose();
         }
 
-        if (report.Completed && detached)
-        {
-            try { File.Move(partial, target, overwrite: false); }
-            catch (Exception e) { report.Completed = false; report.FatalError = "Не удалось завершить выходной файл: " + e.Message; }
-        }
-        if (!report.Completed && File.Exists(partial)) report.RetainedPartialFile = partial;
+        OutputFileStatus.Apply(report, target, detached);
         report.FinishedUtc = DateTime.UtcNow;
         // Never overwrite an existing report. A cancelled/failed conversion also gets a report.
         using (var stream = new FileStream(reportPath, FileMode.CreateNew, FileAccess.Write))
@@ -116,44 +119,7 @@ public static class OutlookConverter
     {
         cancellation.ThrowIfCancellationRequested();
         var messages = FolderReadPolicy.Read(archive, source, report);
-        foreach (var message in messages)
-        {
-            cancellation.ThrowIfCancellationRequested();
-            report.Examined++;
-            var stage = "ReadMessage";
-            try
-            {
-                archive.ReadMessageDetails(message);
-                var messageClass = ConvertString(message, 0x001A);
-                if (messageClass != "IPM.Note")
-                    throw new UnsupportedMessageException("Не поддерживается тип элемента: " + (messageClass ?? "неизвестен"));
-                if (message.Attachments.Any(a => !a.IsFile))
-                    throw new UnsupportedMessageException("Вложенное сообщение, OLE или ссылочное вложение: письмо пропущено целиком.");
-                if (message.Attachments.Any(a => string.Equals(a.FileName, "smime.p7m", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(a.MimeTag, "application/pkcs7-mime", StringComparison.OrdinalIgnoreCase)))
-                    throw new UnsupportedMessageException("S/MIME требует отдельной обработки: письмо пропущено.");
-                stage = "WriteMessage";
-                WriteMessage(archive, message, (object)destination, (field, error) =>
-                {
-                    report.MetadataWarnings++;
-                    report.Issues.Add(new(source.Path, message.Subject ?? "",
-                        "Outlook не сохранил поле " + field + ": " + error.Message, "Metadata", error.ToString()));
-                });
-                report.Converted++;
-            }
-            catch (UnsupportedMessageException e)
-            {
-                report.Skipped++;
-                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, "Unsupported"));
-            }
-            catch (Exception e)
-            {
-                report.Failed++;
-                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, stage, e.ToString()));
-            }
-            finally { message.ClearContents(); message.Properties.Clear(); message.Recipients.Clear(); }
-            progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, source.Path));
-        }
+        CopyMessages(archive, source, (object)destination, messages, report, progress, cancellation);
         // Release cached headers as well: do not retain the whole mailbox in RAM during conversion.
         source.Messages.Clear();
         foreach (var child in source.Folders)
@@ -176,7 +142,53 @@ public static class OutlookConverter
         }
     }
 
-    private static void WriteMessage(XstFile archive, Message message, object target, Action<string, Exception> metadataWarning)
+    private static void CopyMessages(XstFile archive, Folder source, object target, List<Message> messages,
+        ConversionReport report, IProgress<ConversionProgress> progress, CancellationToken cancellation)
+    {
+        foreach (var message in messages)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            report.Examined++;
+            var stage = "ReadMessage";
+            try
+            {
+                archive.ReadMessageDetails(message);
+                var messageClass = ConvertString(message, 0x001A);
+                if (messageClass != "IPM.Note")
+                    throw new UnsupportedMessageException("Не поддерживается тип элемента: " + (messageClass ?? "неизвестен"));
+                if (message.Attachments.Any(a => !a.IsFile))
+                    throw new UnsupportedMessageException("Вложенное сообщение, OLE или ссылочное вложение: письмо пропущено целиком.");
+                if (message.Attachments.Any(a => string.Equals(a.FileName, "smime.p7m", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(a.MimeTag, "application/pkcs7-mime", StringComparison.OrdinalIgnoreCase)))
+                    throw new UnsupportedMessageException("S/MIME требует отдельной обработки: письмо пропущено.");
+                stage = "PrepareBody";
+                var body = PreparedBody.FromMessage(message);
+                stage = "WriteMessage";
+                WriteMessage(archive, message, target, body, (field, error) =>
+                {
+                    report.MetadataWarnings++;
+                    report.Issues.Add(new(source.Path, message.Subject ?? "",
+                        "Outlook не сохранил поле " + field + ": " + error.Message, "Metadata", error.ToString()));
+                });
+                report.Converted++;
+                if (body.ConvertedFromRtf) report.RtfBodiesConvertedToHtml++;
+            }
+            catch (UnsupportedMessageException e)
+            {
+                report.Skipped++;
+                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, "Unsupported"));
+            }
+            catch (Exception e)
+            {
+                report.Failed++;
+                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, stage, e.ToString()));
+            }
+            finally { message.ClearContents(); message.Properties.Clear(); message.Recipients.Clear(); }
+            progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, source.Path));
+        }
+    }
+
+    private static void WriteMessage(XstFile archive, Message message, object target, PreparedBody body, Action<string, Exception> metadataWarning)
     {
         dynamic folder = target;
         var temp = Path.Combine(Path.GetTempPath(), "MailArchive-" + Guid.NewGuid().ToString("N"));
@@ -189,13 +201,7 @@ public static class OutlookConverter
             dynamic items = scope.Keep(folder.Items);
             item = scope.Keep(items.Add("IPM.Note"));
             item.Subject = message.Subject ?? "";
-            if (message.IsBodyHtml) item.HTMLBody = MessageBodies.Html(message);
-            else if (message.IsBodyRtf && message.RtfCompressed is not null)
-            {
-                using var stream = new RtfDecompressor().Decompress(message.RtfCompressed, true);
-                item.RTFBody = stream.ToArray();
-            }
-            else item.Body = message.Body ?? "";
+            body.WriteTo(format => item.BodyFormat = format, html => item.HTMLBody = html);
 
             dynamic recipients = scope.Keep(item.Recipients);
             foreach (var recipient in message.Recipients.Where(r => (int)r.RecipientType is >= 1 and <= 3))

@@ -13,3 +13,8 @@ Self-contained distributions also include the runtime's LICENSE and THIRD-PARTY-
 The reader integration checks use public sample archives from java-libpst:
 https://github.com/rjohnsondev/java-libpst, commit f158a64acf2a0e46ac3bd699bc7a5a8da6c40d26.
 The samples are downloaded separately by tests/Get-Fixtures.ps1 and are not bundled with this application.
+
+AngleSharp 1.8.4 (MIT): https://github.com/AngleSharp/AngleSharp.
+RtfPipe 2.0.7677.4303 (MIT): https://github.com/erdomke/RtfPipe.
+Microsoft.Web.WebView2 SDK 1.0.4258.31: Microsoft license; runtime installed separately.
+License/notice texts: vendor/licenses/.

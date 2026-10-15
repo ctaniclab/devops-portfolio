@@ -18,6 +18,7 @@ void Reject(Action action, string name)
 }
 
 ReaderRegressionChecks.Run(Check);
+FeatureChecks.Run(Check);
 var recoveryReport = new ConversionReport();
 var unreadable = FolderReadPolicy.Read(() => throw new IndexOutOfRangeException("bad table"),
     () => [], "Входящие", recoveryReport);
@@ -79,10 +80,19 @@ foreach (var path in args)
     }
     var populated = AllFolders(root).First(f => f.ContentCount > 0);
     var headerCount = file.ReadMessages(populated).Count;
+    var selected = MessageSelection.FromMessage(populated.Messages[0]);
+    var selectedFolder = selected.ResolveFolder(root);
+    var chosen = selected.ResolveMessage(file.ReadMessages(selectedFolder));
+    Check(chosen.Nid.dwValue == selected.MessageId && chosen.Folder.Nid.dwValue == selected.FolderId,
+        $"{Path.GetExtension(path)} single-message selection resolves exact folder and message IDs");
+    bool rejectsWrong = false;
+    try { new MessageSelection(selected.FolderId, 0xFFFFFFE4).ResolveMessage(file.ReadMessages(selectedFolder)); }
+    catch (InvalidOperationException) { rejectsWrong = true; }
+    Check(rejectsWrong, "Missing single-message ID fails instead of exporting a different message");
     populated.ContentCount = 0;
     Check(headerCount > 0 && file.ReadMessages(populated).Count == headerCount,
         $"{Path.GetExtension(path)} messages remain visible with a stale zero cached count");
-    int folders = 0, messages = 0, bodies = 0;
+    int folders = 0, messages = 0, bodies = 0, rtfBodies = 0;
     bool knownBody = false;
     void Visit(Folder folder)
     {
@@ -93,12 +103,19 @@ foreach (var path in args)
             file.ReadMessageDetails(message);
             var body = message.Body ?? MessageBodies.Html(message);
             if (body.Length > 0 || message.RtfCompressed?.Length > 0) bodies++;
+            if (message.RtfCompressed is { Length: > 0 })
+            {
+                var prepared = PreparedBody.FromMessage(message);
+                if (string.IsNullOrWhiteSpace(prepared.Html)) throw new Exception("RTF fixture produced an empty formatted body.");
+                rtfBodies++;
+            }
             if (body.Contains("This is an e-mail message sent automatically by Microsoft Outlook while testing the settings for your account.")) knownBody = true;
             message.ClearContents();
         }
         foreach (var child in folder.Folders) Visit(child);
     }
     Visit(root);
+    if (rtfBodies > 0) Check(true, $"Actual {Path.GetExtension(path)} RTF fixture bodies prepare successfully: {rtfBodies}");
     Check(folders > 1 && messages > 0 && bodies > 0, $"Actual {Path.GetExtension(path)} folder/header/body reading: {folders} folders, {messages} items, {bodies} bodies");
     if (path.EndsWith(".ost", StringComparison.OrdinalIgnoreCase)) Check(knownBody, "OST known Outlook test email body matches fixture expectation");
     Check(before.SequenceEqual(SHA256.HashData(File.ReadAllBytes(path))), "Source archive SHA256 unchanged after browsing");

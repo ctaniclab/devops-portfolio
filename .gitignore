@@ -5,3 +5,5 @@ dist/
 *.pst
 *.ost
 *.conversion.json
+
+downloads/*.exe

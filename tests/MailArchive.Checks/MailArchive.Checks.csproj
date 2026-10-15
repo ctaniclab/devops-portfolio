@@ -10,6 +10,12 @@
     <Compile Include="../../src/MailArchive/MessageBodies.cs" Link="MessageBodies.cs" />
     <Compile Include="../../src/MailArchive/FolderReadPolicy.cs" Link="FolderReadPolicy.cs" />
     <Compile Include="../../src/MailArchive/MetadataCopy.cs" Link="MetadataCopy.cs" />
+    <Compile Include="../../src/MailArchive/PreparedBody.cs" Link="PreparedBody.cs" />
+    <Compile Include="../../src/MailArchive/MessageSelection.cs" Link="MessageSelection.cs" />
+    <Compile Include="../../src/MailArchive/PreviewHtml.cs" Link="PreviewHtml.cs" />
+    <Compile Include="../../src/MailArchive/OutputFileStatus.cs" Link="OutputFileStatus.cs" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
+    <PackageReference Include="RtfPipe" Version="2.0.7677.4303" />
+    <PackageReference Include="AngleSharp" Version="1.8.4" />
   </ItemGroup>
 </Project>

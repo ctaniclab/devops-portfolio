@@ -9,6 +9,9 @@ internal static class MetadataCopy
     public static bool TrySet(string field, Action write, Action<string, Exception> warning)
     {
         try { write(); return true; }
-        catch (COMException error) { warning(field, error); return false; }
+        // IDispatch maps E_ACCESSDENIED to UnauthorizedAccessException and E_INVALIDARG to
+        // ArgumentException, not necessarily COMException (as confirmed by the user's report).
+        catch (Exception error) when (error is COMException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { warning(field, error); return false; }
     }
 }

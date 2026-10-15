@@ -21,8 +21,9 @@ public partial class MainWindow : Window
     private bool busy;
     private CancellationTokenSource? conversion;
     private string? lastReportPath;
+    private readonly MailPreview mailPreview;
 
-    public MainWindow() { InitializeComponent(); }
+    public MainWindow() { InitializeComponent(); mailPreview = new MailPreview(HtmlPreview); }
 
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
@@ -107,26 +108,56 @@ public partial class MainWindow : Window
 
     private async void Message_Selected(object sender, SelectionChangedEventArgs e)
     {
-        if (busy || archive is null || Messages.SelectedItem is not Message message) return;
+        if (busy || archive is null) return;
+        if (Messages.SelectedItem is not Message message) { ResetMessage(); return; }
         SetBusy(true, "Чтение письма…");
         try
         {
             ResetMessage();
             await Task.Run(() => archive.ReadMessageDetails(message));
             currentMessage = message;
-            MessageHeader.Text = $"{message.Subject}\nОт: {message.From}    Дата: {message.DisplayDate}\nКому: {message.ToDisplayList}\nКопия: {message.CcDisplayList}";
-            HtmlText.Text = message.IsBodyHtml ? MessageBodies.Html(message) : "";
-            if (message.Body is not null) BodyText.Text = message.Body;
-            else if (message.IsBodyRtf)
-            {
-                var document = message.GetBodyAsFlowDocument();
-                BodyText.Text = new TextRange(document.ContentStart, document.ContentEnd).Text;
-            }
-            else BodyText.Text = ArchiveUtilities.HtmlToText(HtmlText.Text);
+            string Recipients(RecipientType type) => string.Join("; ", message.Recipients.Where(r => r.RecipientType == type)
+                .Select(r => string.IsNullOrEmpty(r.EmailAddress) ? r.DisplayName : $"{r.DisplayName} <{r.EmailAddress}>"));
+            var senderAddress = message.Properties.FirstOrDefault(p => (ushort)p.Tag == 0x0C1F)?.Value as string;
+            MessageHeader.Text = $"{message.Subject}\nОт: {message.From} {senderAddress}\n"
+                + $"Кому: {Recipients(RecipientType.To)}\nКопия: {Recipients(RecipientType.Cc)}\n"
+                + $"Скрытая копия: {Recipients(RecipientType.Bcc)}\nПолучено: {message.Received:g}    Отправлено: {message.Submitted:g}";
+            var body = await Task.Run(() => PreparedBody.FromMessage(message));
+            BodyText.Text = body.Text;
+            HtmlText.Text = body.Html;
             if (string.IsNullOrEmpty(BodyText.Text)) BodyText.Text = "Текстовое содержимое отсутствует или недоступно в локальном архиве.";
+            MessageProperties.ItemsSource = message.Properties;
             Attachments.ItemsSource = message.Attachments;
             if (message.Attachments.Count > 0) Attachments.SelectedIndex = 0;
             Status.Text = $"Письмо открыто. Вложений: {message.Attachments.Count}. Вложенные письма и OLE не открываются автоматически.";
+            try
+            {
+                int imageBytes = 0;
+                var preview = await Task.Run(() => PreviewHtml.Create(body.Html, cid =>
+                {
+                    var attachment = message.Attachments.FirstOrDefault(a => a.IsFile && string.Equals(a.ContentId?.Trim('<', '>'), cid, StringComparison.OrdinalIgnoreCase));
+                    if (attachment is null || attachment.Size > 8 * 1024 * 1024 || imageBytes >= 24 * 1024 * 1024) return null;
+                    try
+                    {
+                        using var stream = new BoundedImageStream(8 * 1024 * 1024);
+                        archive.SaveAttachment(stream, attachment);
+                        imageBytes += (int)stream.Length;
+                        return stream.ToArray();
+                    }
+                    catch (Exception error) when (error is IOException or XstException) { return null; }
+                }));
+                await mailPreview.ShowAsync(preview).WaitAsync(TimeSpan.FromSeconds(25));
+                HtmlPreview.Visibility = Visibility.Visible;
+                PreviewHint.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception error)
+            {
+                HtmlPreview.Visibility = Visibility.Collapsed;
+                PreviewHint.Visibility = Visibility.Visible;
+                PreviewHint.Text = "Подробный HTML-просмотр недоступен. Текст письма доступен на вкладке «Текст письма». Для HTML-просмотра нужен Microsoft Edge WebView2 Runtime.";
+                SetReport(DiagnosticLog.Write(error, "Инициализация подробного просмотра письма"));
+                BodyTabs.SelectedIndex = 1;
+            }
         }
         catch (Exception error) { ResetMessage(); ShowError(error, "Не удалось прочитать письмо."); }
         finally { SetBusy(false); }
@@ -169,16 +200,24 @@ public partial class MainWindow : Window
         finally { SetBusy(false); }
     }
 
-    private async void Convert_Click(object sender, RoutedEventArgs e)
+    private async void Convert_Click(object sender, RoutedEventArgs e) => await BeginConversionAsync(false);
+    private async void ConvertSelected_Click(object sender, RoutedEventArgs e) => await BeginConversionAsync(true);
+
+    private async Task BeginConversionAsync(bool selectedOnly)
     {
         if (sourcePath is null) return;
+        var selected = Messages.SelectedItem as Message;
+        if (selectedOnly && selected is null) return;
+        var selection = selectedOnly ? MessageSelection.FromMessage(selected!) : null;
         var dialog = new SaveFileDialog { Filter = "Outlook PST (*.pst)|*.pst", DefaultExt = ".pst", AddExtension = true,
-            FileName = Path.GetFileNameWithoutExtension(sourcePath) + "-converted.pst" };
+            FileName = selectedOnly ? Path.GetFileNameWithoutExtension(ArchiveUtilities.SafeAttachmentName(selected!.Subject)) + ".pst"
+                : Path.GetFileNameWithoutExtension(sourcePath) + "-converted.pst" };
         if (dialog.ShowDialog(this) != true) return;
         try { ArchiveUtilities.ValidateDestination(sourcePath, dialog.FileName); }
         catch (Exception error) { ShowError(error, "Выберите другой выходной файл."); return; }
         if (MessageBox.Show(this,
-            "Будут восстановлены письма, папки и обычные файловые вложения в новом PST через классический Outlook.\n\n"
+            (selectedOnly ? "Будет перенесено только выбранное письмо с его файловыми вложениями в новый PST.\n\n"
+                : "Будут восстановлены письма, папки и обычные файловые вложения в новом PST через классический Outlook.\n\n")
             + "Это не полная копия MAPI: контакты, календарь, задачи, S/MIME, вложенные письма и OLE не переносятся. Все пропуски и ошибки попадут в JSON-отчёт.\n\n"
             + "Используйте отдельную локальную копию OST. Исходный файл останется без изменений. Outlook может запросить разрешение на доступ.\n\nПродолжить?",
             "Перенос писем OST → PST", MessageBoxButton.OKCancel, MessageBoxImage.Information) != MessageBoxResult.OK) return;
@@ -189,13 +228,14 @@ public partial class MainWindow : Window
         {
             var progress = new Progress<ConversionProgress>(p => Status.Text =
                 $"{p.Folder} · Обработано: {p.Examined} · Перенесено: {p.Converted} · Пропущено: {p.Skipped} · Ошибок: {p.Failed}");
-            var result = await OutlookConverter.ConvertAsync(sourcePath, dialog.FileName, progress, conversion.Token);
+            var result = await OutlookConverter.ConvertAsync(sourcePath, dialog.FileName, progress, conversion.Token, selection);
             var r = result.Report;
             SetReport(result.ReportPath);
             var heading = r.Cancelled ? "Перенос остановлен" : !r.Completed ? "Перенос выполнен частично"
                 : r.Skipped + r.Failed + r.MetadataWarnings > 0 ? "Перенос завершён с предупреждениями" : "Перенос писем завершён";
             var text = $"{heading}.\nПеренесено: {r.Converted}; пропущено: {r.Skipped}; ошибок писем: {r.Failed}.\n"
                 + $"Ошибок папок: {r.FolderErrors}; предупреждений метаданных: {r.MetadataWarnings}.\n\n"
+                + $"RTF-писем переведено в HTML: {r.RtfBodiesConvertedToHtml}.\n\n"
                 + (r.Completed ? "PST: " + r.Destination + "\n" : "")
                 + (r.RetainedPartialFile is null ? "" : "Неполный PST: " + r.RetainedPartialFile + "\n")
                 + "Отчёт: " + result.ReportPath + (r.FatalError is null ? "" : "\n\n" + r.FatalError);
@@ -218,6 +258,7 @@ public partial class MainWindow : Window
         busy = value;
         OpenButton.IsEnabled = Folders.IsEnabled = Messages.IsEnabled = Search.IsEnabled = !value;
         ConvertButton.IsEnabled = !value && sourcePath is not null && Path.GetExtension(sourcePath).Equals(".ost", StringComparison.OrdinalIgnoreCase);
+        ConvertSelectedButton.IsEnabled = !value && sourcePath is not null && Messages.SelectedItem is Message;
         SaveAttachmentButton.IsEnabled = !value && Attachments.SelectedItem is Attachment { IsFile: true };
         ReportButton.IsEnabled = !value && lastReportPath is not null;
         Progress.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
@@ -231,6 +272,12 @@ public partial class MainWindow : Window
         if (currentMessage is not null) { currentMessage.ClearContents(); currentMessage.Properties.Clear(); currentMessage.Recipients.Clear(); }
         currentMessage = null; MessageHeader.Text = "Выберите письмо";
         BodyText.Clear(); HtmlText.Clear(); SaveAttachmentButton.IsEnabled = false;
+        ConvertSelectedButton.IsEnabled = false;
+        MessageProperties.ItemsSource = null;
+        mailPreview.Clear();
+        HtmlPreview.Visibility = Visibility.Collapsed;
+        PreviewHint.Text = "Выберите письмо для подробного просмотра.";
+        PreviewHint.Visibility = Visibility.Visible;
     }
 
     private void ShowError(Exception error, string context)
@@ -268,5 +315,14 @@ public partial class MainWindow : Window
             return;
         }
         readGuard?.Dispose();
+        mailPreview.Dispose();
+    }
+
+    private sealed class BoundedImageStream(int limit) : MemoryStream
+    {
+        public override void Write(byte[] buffer, int offset, int count)
+        { if (Position + count > limit) throw new IOException("Вложенное изображение слишком большое для предпросмотра."); base.Write(buffer, offset, count); }
+        public override void Write(ReadOnlySpan<byte> buffer)
+        { if (Position + buffer.Length > limit) throw new IOException("Вложенное изображение слишком большое для предпросмотра."); base.Write(buffer); }
     }
 }

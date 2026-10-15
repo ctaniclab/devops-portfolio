@@ -3,6 +3,9 @@ namespace MailArchive;
 public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null);
 public sealed class ConversionReport
 {
+    public string AppVersion { get; set; } = "1.1.0";
+    public string Mode { get; set; } = "Mailbox";
+    public MessageSelection? Selection { get; set; }
     public string Source { get; set; } = "";
     public string Destination { get; set; } = "";
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
@@ -13,6 +16,7 @@ public sealed class ConversionReport
     public int Failed { get; set; }
     public int FolderErrors { get; set; }
     public int MetadataWarnings { get; set; }
+    public int RtfBodiesConvertedToHtml { get; set; }
     public bool Cancelled { get; set; }
     public bool Completed { get; set; }
     public string? FatalError { get; set; }
@@ -22,6 +26,7 @@ public sealed class ConversionReport
         "Восстановление писем, не полная копия MAPI-хранилища. Календари, контакты, задачи и служебные элементы не переносятся.",
         "Не гарантируется сохранение всех MAPI-свойств, цифровых подписей, правил, категорий и флагов. Не заменяет резервную копию.",
         "В OST доступны только локально сохранённые данные. Отсутствующие на диске письма и вложения восстановить нельзя.",
-        "Письма с вложенными сообщениями, OLE/ссылочными вложениями и S/MIME пропускаются с записью в отчёт."
+        "Письма с вложенными сообщениями, OLE/ссылочными вложениями и S/MIME пропускаются с записью в отчёт.",
+        "RTF переводится в HTML с сохранением доступного форматирования; вёрстка может отличаться от Outlook. Исходник остаётся в OST."
     ];
 }

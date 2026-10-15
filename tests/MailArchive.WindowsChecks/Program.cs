@@ -7,6 +7,7 @@ using XstReader;
 // Requires interactive Windows with a configured classic Outlook profile.
 // Uses the public sample OST only; never run against a live mailbox.
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+if (args is ["--preview-smoke"]) { await PreviewSmoke.RunAsync(); return; }
 if (args.Length != 2) throw new ArgumentException("Usage: WindowsChecks <example-2013.ost> <new-output.pst>");
 var before = SHA256.HashData(File.ReadAllBytes(args[0]));
 var result = await OutlookConverter.ConvertAsync(Path.GetFullPath(args[0]), Path.GetFullPath(args[1]),
@@ -33,3 +34,26 @@ void Visit(Folder folder)
 Visit(root);
 if (count != result.Report.Converted || !knownBody) throw new Exception("Output PST content/count check failed.");
 Console.WriteLine($"PASS: Outlook converted {count} messages, known body preserved, source SHA256 unchanged.");
+// Reopen the source and independently exercise selection-only conversion into another new file.
+var sourceArchive = new XstFile(args[0]);
+var sourceRoot = sourceArchive.ReadFolderTree();
+IEnumerable<Folder> Walk(Folder folder)
+{
+    yield return folder;
+    foreach (var child in folder.Folders) foreach (var descendant in Walk(child)) yield return descendant;
+}
+MessageSelection? selection = null;
+foreach (var folder in Walk(sourceRoot))
+{
+    var candidate = sourceArchive.ReadMessages(folder).FirstOrDefault();
+    if (candidate is null) continue;
+    sourceArchive.ReadMessageDetails(candidate);
+    if (candidate.Properties.Any(p => (ushort)p.Tag == 0x001A && (string?)p.Value == "IPM.Note"))
+    { selection = MessageSelection.FromMessage(candidate); break; }
+}
+if (selection is null) throw new Exception("No mail message found for single-message check.");
+var single = await OutlookConverter.ConvertAsync(Path.GetFullPath(args[0]), Path.GetFullPath(args[1]) + ".single.pst",
+    new Progress<ConversionProgress>(), CancellationToken.None, selection);
+if (!single.Report.Completed || single.Report.Examined != 1 || single.Report.Converted != 1 || single.Report.Failed != 0)
+    throw new Exception("Single-message Outlook conversion failed: " + single.ReportPath);
+Console.WriteLine("PASS: selected-message conversion examines and saves exactly one message.");

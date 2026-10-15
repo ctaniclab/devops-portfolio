@@ -11,6 +11,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -28,8 +29,63 @@ jobs:
       - name: Package Windows application
         shell: pwsh
         run: ./Build.ps1
+      - name: Scan release with Microsoft Defender
+        shell: pwsh
+        run: ./scripts/Scan-Defender.ps1 -ScanPath dist/win-x64 -ReportPath dist/defender-report.json
+      - name: Verify HTML preview in the published EXE
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'mailarchive-preview.json'
+          $process = Start-Process (Resolve-Path dist/win-x64/MailArchive.exe).Path -ArgumentList @('--self-check-output', $report) -PassThru
+          if (-not $process.WaitForExit(90000)) { $process.Kill(); throw 'Published EXE self-check timed out.' }
+          if ($process.ExitCode -ne 0) { if (Test-Path $report) { Get-Content $report }; throw 'Published EXE self-check failed.' }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if (-not $result.HtmlRenderingVerified) { throw 'Email HTML rendering was not verified.' }
+          Copy-Item $report dist/preview-report.json
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.1.0.exe
+          (Get-FileHash dist/MailArchive-1.1.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.1.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.1.0.exe.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: MailArchive-win-x64
-          path: dist/win-x64/
+          name: MailArchive-1.1.0-verified
+          path: |
+            dist/MailArchive-1.1.0.exe
+            dist/MailArchive-1.1.0.exe.sha256
+            dist/MailArchive-win-x64.zip
+            dist/defender-report.json
+            dist/defender-report.json.txt
+            dist/preview-report.json
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: MailArchive-check-failure
+          path: |
+            dist/defender-report.json*
+            dist/preview-report.json
+          if-no-files-found: ignore
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/mail-archive-download'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MailArchive-1.1.0-verified
+          path: release
+      - name: Publish only after tests, preview and Defender passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if gh release view v1.1.0 >/dev/null 2>&1; then
+            echo 'Version v1.1.0 already exists; existing assets will not be overwritten.'
+            exit 0
+          fi
+          gh release create v1.1.0 --target '${{ github.sha }}' --title 'Mail Archive 1.1.0' --notes 'Selected-message export, formatted HTML/RTF preview, fixes for mapped Outlook property errors and locked PST finalization. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*
