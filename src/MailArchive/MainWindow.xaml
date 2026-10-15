@@ -10,7 +10,7 @@
           </StackPanel>
           <TextBlock Text="Ваша почта — в порядке. Просматривайте архивы и переносите письма в Outlook." Margin="0,6,0,0" Foreground="{StaticResource MutedInk}" TextWrapping="Wrap"/>
         </StackPanel>
-        <Image Grid.Column="1" x:Name="HeaderArt" Source="Assets/archive-hero.png" Height="108" Stretch="Uniform" IsHitTestVisible="False" RenderOptions.BitmapScalingMode="HighQuality"/>
+        <Image Grid.Column="1" x:Name="HeaderArt" Source="Assets/archive-hero.png" Height="96" Stretch="Uniform" IsHitTestVisible="False" RenderOptions.BitmapScalingMode="HighQuality"/>
       </Grid>
       <WrapPanel>
         <Button x:Name="OpenButton" Content="Открыть OST / PST…" Click="Open_Click" Background="{StaticResource Accent}" Foreground="White"/>
@@ -48,7 +48,7 @@
       </Border>
       <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Stretch" Background="Transparent"/>
       <Grid Grid.Column="2">
-        <Grid.RowDefinitions><RowDefinition Height="0.8*" MinHeight="130"/><RowDefinition Height="12"/><RowDefinition Height="1.2*" MinHeight="180"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="0.65*" MinHeight="130"/><RowDefinition Height="12"/><RowDefinition Height="1.35*" MinHeight="180"/></Grid.RowDefinitions>
         <Border Style="{StaticResource Card}">
           <DockPanel>
             <DockPanel DockPanel.Dock="Top" Margin="4,0,4,8">
@@ -67,7 +67,7 @@
         <GridSplitter Grid.Row="1" Height="12" HorizontalAlignment="Stretch" Background="Transparent"/>
         <Border x:Name="MessagePane" Grid.Row="2" Style="{StaticResource Card}" Padding="10">
           <DockPanel>
-            <ScrollViewer DockPanel.Dock="Top" MaxHeight="140" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer DockPanel.Dock="Top" MaxHeight="90" VerticalScrollBarVisibility="Auto">
               <TextBlock x:Name="MessageHeader" Text="Выберите письмо" FontSize="14" FontWeight="SemiBold" Margin="8,6,8,12" TextWrapping="Wrap"/>
             </ScrollViewer>
             <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">

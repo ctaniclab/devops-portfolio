@@ -23,6 +23,8 @@ public partial class App : Application
             try
             {
                 window = new MainWindow();
+                window.Width = window.MinWidth;
+                window.Height = window.MinHeight;
                 window.Show();
                 await Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ApplicationIdle);
                 var art = (Image)window.FindName("HeaderArt");
@@ -35,9 +37,20 @@ public partial class App : Application
                 var pane = (Border)window.FindName("MessagePane");
                 var save = (Button)window.FindName("SaveAttachmentButton");
                 var tabs = (TabControl)window.FindName("BodyTabs");
-                var saveBounds = save.TransformToAncestor(pane).TransformBounds(new Rect(save.RenderSize));
-                if (saveBounds.Bottom > pane.ActualHeight || tabs.ActualHeight < 70)
-                    throw new InvalidDataException("The message/attachment controls are clipped at the current window size.");
+                void CheckMessagePane()
+                {
+                    window.UpdateLayout();
+                    var saveBounds = save.TransformToAncestor(pane).TransformBounds(new Rect(save.RenderSize));
+                    if (saveBounds.Bottom > pane.ActualHeight || tabs.ActualHeight < 70)
+                        throw new InvalidDataException("The message/attachment controls are clipped at the minimum window size.");
+                }
+                CheckMessagePane();
+                var header = (TextBlock)window.FindName("MessageHeader");
+                var emptyHeader = header.Text;
+                header.Text = string.Join("\n", Enumerable.Repeat("Проверка длинного заголовка письма", 8));
+                CheckMessagePane();
+                header.Text = emptyHeader;
+                window.UpdateLayout();
                 // Capture client content, excluding the native frame that WPF cannot render.
                 var margin = surface.Margin;
                 var bounds = new Rect(0, 0, surface.ActualWidth + margin.Left + margin.Right, surface.ActualHeight + margin.Top + margin.Bottom);
