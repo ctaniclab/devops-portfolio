@@ -31,16 +31,37 @@ public sealed class DisplaySettings
             systemDark = key?.GetValue("AppsUseLightTheme") is int value && value == 0;
         }
         catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
-        IsDark = Current.Theme == "Тёмная" || (Current.Theme == "Системная" && systemDark);
-        var colors = IsDark
-            ? new[] { "#171D2A", "#232D40", "#F0F4FC", "#BAC8DF", "#5368C9", "#344666", "#465774", "#1C2536", "#34425C", "#A2B5D8", "#D0DEFA", "#314A72" }
-            : new[] { "#EEF1F7", "#FFFFFF", "#18243A", "#4B5E7B", "#4659BD", "#E6ECFF", "#CFD8E8", "#F4F6FB", "#D6DEED", "#637BA6", "#3C5788", "#DBE6FC" };
+        if (!ThemePalette.Names.Contains(Current.Theme)) Current.Theme = "Системная";
+        var palette = ThemePalette.Get(Current.Theme, systemDark);
+        IsDark = palette.Dark;
+        var colors = palette.Colors;
         var names = new[] { "Canvas", "Surface", "Ink", "MutedInk", "Accent", "AccentSoft", "Line", "Field", "ScrollTrack", "ScrollThumb", "ScrollHover", "Selection" };
         for (int i = 0; i < names.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
             brush.Freeze(); Application.Current.Resources[names[i]] = brush;
         }
+        if (palette.GradientEnd is not null)
+        {
+            var gradient = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(colors[0]),
+                (Color)ColorConverter.ConvertFromString(palette.GradientEnd), 35);
+            Brush canvas = gradient;
+            if (palette.Stars)
+            {
+                var sky = new DrawingGroup();
+                sky.Children.Add(new GeometryDrawing(gradient, null, new RectangleGeometry(new Rect(0, 0, 1400, 900))));
+                for (int i = 0; i < 90; i++)
+                {
+                    double radius = i % 4 == 0 ? 1.5 : 0.7;
+                    sky.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromArgb((byte)(75 + i % 145), 217, 222, 255)), null,
+                        new EllipseGeometry(new Point((i * 137 + 31) % 1400, (i * 251 + 19) % 900), radius, radius)));
+                }
+                canvas = new DrawingBrush(sky) { Stretch = Stretch.Fill };
+            }
+            canvas.Freeze(); Application.Current.Resources["Canvas"] = canvas;
+        }
+        Application.Current.Resources["CardRadius"] = new CornerRadius(palette.CardRadius);
+        Application.Current.Resources["ButtonRadius"] = new CornerRadius(palette.ButtonRadius);
         Application.Current.Resources[SystemColors.HighlightBrushKey] = Application.Current.Resources["Selection"];
         Application.Current.Resources[SystemColors.HighlightTextBrushKey] = Application.Current.Resources["Ink"];
         Application.Current.Resources[SystemColors.InactiveSelectionHighlightBrushKey] = Application.Current.Resources["Selection"];

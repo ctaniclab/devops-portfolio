@@ -27,7 +27,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        ThemeChoice.ItemsSource = new[] { "Системная", "Светлая", "Тёмная" };
+        ThemeChoice.ItemsSource = ThemePalette.Names;
         ThemeChoice.SelectedItem = DisplaySettings.Current.Theme;
         CompatibleRendering.IsChecked = DisplaySettings.Current.CompatibleRendering;
         initializing = false;

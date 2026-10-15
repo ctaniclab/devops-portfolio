@@ -87,6 +87,7 @@ public static class UiSelfCheck
         DisplaySettings.Current.Theme = "Светлая"; DisplaySettings.Current.CompatibleRendering = true; DisplaySettings.Apply();
         MainWindow? main = null; MessageWindow? reader = null;
         bool mainVerified = false, readerVerified = false, scrollbarsVerified = false, htmlVerified = false, wizardVerified = false;
+        var verifiedThemes = new List<string>();
         string? error = null; int exit = 1;
         try
         {
@@ -101,6 +102,20 @@ public static class UiSelfCheck
             ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
             await main.Dispatcher.InvokeAsync(main.UpdateLayout, DispatcherPriority.ApplicationIdle);
             Capture(main, output + ".dark.png"); mainVerified = true;
+            int messageCount = ((DataGrid)main.FindName("Messages")).Items.Count;
+            var extraThemes = new Dictionary<string, string> { ["Классическая"] = "classic", ["Стекло"] = "glass", ["Космос"] = "space", ["Океан"] = "ocean" };
+            foreach (var theme in ThemePalette.Names)
+            {
+                ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = theme;
+                await main.Dispatcher.InvokeAsync(main.UpdateLayout, DispatcherPriority.ApplicationIdle);
+                VerifyTextContrast((Button)main.FindName("ReadMessageButton"));
+                VerifyTextContrast((CheckBox)main.FindName("ShowServiceFolders"));
+                VerifyTextContrast((ComboBox)main.FindName("ThemeChoice"));
+                if (((DataGrid)main.FindName("Messages")).Items.Count != messageCount) throw new IOException("Theme switch changed the loaded mailbox.");
+                if (extraThemes.TryGetValue(theme, out var filename)) Capture(main, output + "." + filename + ".png");
+                verifiedThemes.Add(theme);
+            }
+            ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
             var message = new Message { Subject = "Тест чтения письма", From = "Демонстрация интерфейса", BodyHtml = "<table><tr><td>Тест письма</td></tr></table><p><b>Форматирование и кириллица</b></p><script>document.body.innerText='unsafe'</script>" + string.Concat(Enumerable.Range(1, 45).Select(i => "<p>Демонстрационный текст письма " + i + "</p>")) };
             reader = new MessageWindow(null, message) { Owner = main, Width = 820, Height = 640 };
             var view = (Microsoft.Web.WebView2.Wpf.WebView2)reader.FindName("HtmlPreview");
@@ -142,8 +157,14 @@ public static class UiSelfCheck
                 ((Button)wizard.FindName("NextButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 if (((Border)wizard.FindName("FormatStep")).Visibility != Visibility.Visible || wizard.Selected.Count != rows.Count) throw new IOException("Select-all did not advance to format choice with every message.");
                 ((RadioButton)wizard.FindName("MsgChoice")).IsChecked = true;
-                VerifyTextContrast((RadioButton)wizard.FindName("PstChoice"));
-                VerifyTextContrast((RadioButton)wizard.FindName("MsgChoice"));
+                foreach (string theme in ThemePalette.Names)
+                {
+                    ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = theme;
+                    await wizard.Dispatcher.InvokeAsync(wizard.UpdateLayout, DispatcherPriority.ApplicationIdle);
+                    VerifyTextContrast((RadioButton)wizard.FindName("PstChoice"));
+                    VerifyTextContrast((RadioButton)wizard.FindName("MsgChoice"));
+                }
+                ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
                 Capture(wizard, output + ".wizard.png");
                 wizard.Close(); wizardVerified = true;
             }
@@ -153,8 +174,9 @@ public static class UiSelfCheck
         finally
         {
             reader?.Close(); main?.Close();
-            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.3.1", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
+            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.4.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
                 HtmlRenderingVerified = htmlVerified, ThemedScrollBarsVerified = scrollbarsVerified, ExportWizardVerified = wizardVerified,
+                ThemesVerified = verifiedThemes, AllThemesVerified = verifiedThemes.Count == ThemePalette.Names.Count,
                 HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
             Application.Current.Shutdown(exit);
         }
