@@ -1,9 +1,10 @@
 namespace MailArchive;
 
-public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null);
+public sealed record PstFolderInfo(string Path, int Messages);
+public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null, string? ItemClass = null);
 public sealed class ConversionReport
 {
-    public string AppVersion { get; set; } = "1.1.0";
+    public string AppVersion { get; set; } = "1.2.0";
     public string Mode { get; set; } = "Mailbox";
     public MessageSelection? Selection { get; set; }
     public string Source { get; set; } = "";
@@ -17,6 +18,9 @@ public sealed class ConversionReport
     public int FolderErrors { get; set; }
     public int MetadataWarnings { get; set; }
     public int RtfBodiesConvertedToHtml { get; set; }
+    public int? OutputMessagesVerified { get; set; }
+    public bool OutlookReadBackVerified { get; set; }
+    public List<PstFolderInfo> OutputFolders { get; set; } = [];
     public bool Cancelled { get; set; }
     public bool Completed { get; set; }
     public string? FatalError { get; set; }

@@ -14,6 +14,10 @@ var result = await OutlookConverter.ConvertAsync(Path.GetFullPath(args[0]), Path
     new Progress<ConversionProgress>(), CancellationToken.None);
 if (!result.Report.Completed || result.Report.Converted == 0 || result.Report.Failed != 0)
     throw new Exception("Outlook conversion failed. Inspect report: " + result.ReportPath);
+if (!result.Report.OutlookReadBackVerified || result.Report.OutputMessagesVerified != result.Report.Converted)
+    throw new Exception("Saved Outlook folder counts were not verified.");
+if (result.Report.OutputFolders.Any(f => f.Path.Contains("\\IPM_SUBTREE\\", StringComparison.OrdinalIgnoreCase)))
+    throw new Exception("OST service wrappers leaked into the visible output mailbox.");
 if (!before.SequenceEqual(SHA256.HashData(File.ReadAllBytes(args[0])))) throw new Exception("Source archive changed!");
 var archive = new XstFile(args[1]);
 var root = archive.ReadFolderTree();

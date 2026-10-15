@@ -14,6 +14,8 @@
     <Compile Include="../../src/MailArchive/MessageSelection.cs" Link="MessageSelection.cs" />
     <Compile Include="../../src/MailArchive/PreviewHtml.cs" Link="PreviewHtml.cs" />
     <Compile Include="../../src/MailArchive/OutputFileStatus.cs" Link="OutputFileStatus.cs" />
+    <Compile Include="../../src/MailArchive/ExportFolderLayout.cs" Link="ExportFolderLayout.cs" />
+    <Compile Include="../../src/MailArchive/PstInventory.cs" Link="PstInventory.cs" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
     <PackageReference Include="RtfPipe" Version="2.0.7677.4303" />
     <PackageReference Include="AngleSharp" Version="1.8.4" />

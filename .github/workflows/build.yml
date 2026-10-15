@@ -45,23 +45,25 @@ jobs:
             throw 'Published EXE self-check failed.'
           }
           $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (-not $result.HtmlRenderingVerified) { throw 'Email HTML rendering was not verified.' }
+          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified) { throw 'Email HTML rendering or application UI was not verified.' }
           Copy-Item $report dist/preview-report.json
+          Copy-Item "$report.png" dist/ui-preview.png
       - name: Prepare release assets
         shell: pwsh
         run: |
-          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.1.0.exe
-          (Get-FileHash dist/MailArchive-1.1.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.1.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.1.0.exe.sha256
+          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.2.0.exe
+          (Get-FileHash dist/MailArchive-1.2.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.2.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.2.0.exe.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: MailArchive-1.1.0-verified
+          name: MailArchive-1.2.0-verified
           path: |
-            dist/MailArchive-1.1.0.exe
-            dist/MailArchive-1.1.0.exe.sha256
+            dist/MailArchive-1.2.0.exe
+            dist/MailArchive-1.2.0.exe.sha256
             dist/MailArchive-win-x64.zip
             dist/defender-report.json
             dist/defender-report.json.txt
             dist/preview-report.json
+            dist/ui-preview.png
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -70,6 +72,7 @@ jobs:
           path: |
             dist/defender-report.json*
             dist/preview-report.json
+            dist/ui-preview.png
           if-no-files-found: ignore
 
   release:
@@ -81,7 +84,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: MailArchive-1.1.0-verified
+          name: MailArchive-1.2.0-verified
           path: release
       - name: Publish only after tests, preview and Defender passed
         env:
@@ -89,8 +92,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          if gh release view v1.1.0 >/dev/null 2>&1; then
-            echo 'Version v1.1.0 already exists; existing assets will not be overwritten.'
+          if gh release view v1.2.0 >/dev/null 2>&1; then
+            echo 'Version v1.2.0 already exists; existing assets will not be overwritten.'
             exit 0
           fi
-          gh release create v1.1.0 --target '${{ github.sha }}' --title 'Mail Archive 1.1.0' --notes 'Selected-message export, formatted HTML/RTF preview, fixes for mapped Outlook property errors and locked PST finalization. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*
+          gh release create v1.2.0 --target '${{ github.sha }}' --title 'Mail Archive 1.2.0' --notes 'Rounded interface and archive artwork, visible exported mailbox folders, verified saved-message counts, direct opening of the first populated PST folder in Outlook, and clear explanations for skipped contacts. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*

@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private bool busy;
     private CancellationTokenSource? conversion;
     private string? lastReportPath;
+    private string? lastOutputPath;
     private readonly MailPreview mailPreview;
 
     public MainWindow() { InitializeComponent(); mailPreview = new MailPreview(HtmlPreview); }
@@ -46,9 +47,8 @@ public partial class MainWindow : Window
             Folders.Items.Clear();
             var item = MakeFolder(root); item.IsExpanded = true;
             Folders.Items.Add(item);
-            initialFolder = FindAndExpand(item, f => string.Equals(f.Name, "Входящие", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(f.Name, "Inbox", StringComparison.OrdinalIgnoreCase))
-                ?? FindAndExpand(item, f => f.ContentCount > 0) ?? item;
+            var preferred = ExportFolderLayout.InitialFolder(root);
+            initialFolder = FindAndExpand(item, f => ReferenceEquals(f, preferred)) ?? item;
             FileLabel.Text = sourcePath;
             Status.Text = "Архив открыт только для чтения. Выберите папку. Поиск работает в выбранной папке.";
         }
@@ -231,20 +231,55 @@ public partial class MainWindow : Window
             var result = await OutlookConverter.ConvertAsync(sourcePath, dialog.FileName, progress, conversion.Token, selection);
             var r = result.Report;
             SetReport(result.ReportPath);
+            if (File.Exists(r.Destination)) lastOutputPath = r.Destination;
             var heading = r.Cancelled ? "Перенос остановлен" : !r.Completed ? "Перенос выполнен частично"
                 : r.Skipped + r.Failed + r.MetadataWarnings > 0 ? "Перенос завершён с предупреждениями" : "Перенос писем завершён";
-            var text = $"{heading}.\nПеренесено: {r.Converted}; пропущено: {r.Skipped}; ошибок писем: {r.Failed}.\n"
+            var text = $"{heading}.\nПеренесено писем: {r.Converted}; пропущено элементов: {r.Skipped}; ошибок писем: {r.Failed}.\n"
+                + (r.Skipped == 0 ? "" : "\nПричины пропуска:\n" + PstInventory.SkipSummary(r) + "\n\n")
                 + $"Ошибок папок: {r.FolderErrors}; предупреждений метаданных: {r.MetadataWarnings}.\n\n"
+                + (r.OutlookReadBackVerified ? $"Outlook подтвердил количество сохранённых элементов: {r.OutputMessagesVerified}.\n" : "")
+                + (r.OutputFolders.Count == 0 ? "" : "Первая папка с письмами: " + r.OutputFolders[0].Path + "\nНажмите «Открыть PST в Outlook…», чтобы перейти к письмам.\n\n")
                 + $"RTF-писем переведено в HTML: {r.RtfBodiesConvertedToHtml}.\n\n"
                 + (r.Completed ? "PST: " + r.Destination + "\n" : "")
                 + (r.RetainedPartialFile is null ? "" : "Неполный PST: " + r.RetainedPartialFile + "\n")
                 + "Отчёт: " + result.ReportPath + (r.FatalError is null ? "" : "\n\n" + r.FatalError);
-            Status.Text = $"{heading}. Перенесено: {r.Converted}. Ошибок писем: {r.Failed}; папок: {r.FolderErrors}. Подробности — «Открыть отчёт / журнал…».";
+            Status.Text = $"{heading}. Писем: {r.Converted}; пропущено элементов: {r.Skipped}; ошибок: {r.Failed + r.FolderErrors}. "
+                + (r.Converted > 0 ? "Результат доступен через «Открыть PST в Outlook…»." : "Причины — в отчёте.");
             MessageBox.Show(this, text, "Результат", MessageBoxButton.OK,
                 r.Completed && r.Skipped + r.Failed + r.MetadataWarnings == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
         catch (Exception error) { ShowError(error, "Не удалось выполнить перенос. Проверьте установку классического Outlook и права на выходную папку."); }
         finally { conversion.Dispose(); conversion = null; CancelButton.IsEnabled = false; SetBusy(false); }
+    }
+
+    private async void OpenOutlook_Click(object sender, RoutedEventArgs e)
+    {
+        var path = lastOutputPath;
+        if (path is null || !File.Exists(path))
+        {
+            var dialog = new OpenFileDialog { Filter = "Outlook PST (*.pst)|*.pst", CheckFileExists = true };
+            if (dialog.ShowDialog(this) != true) return;
+            path = dialog.FileName;
+        }
+        // Outlook needs a writable store. Release our read-only guard if the user
+        // explicitly opens the same PST in Outlook; avoid a sharing violation with its writable store.
+        if (sourcePath is not null && string.Equals(Path.GetFullPath(sourcePath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+        {
+            ResetMessage(); Messages.ItemsSource = null; Folders.Items.Clear();
+            archive = null; currentFolder = null; sourcePath = null;
+            readGuard?.Dispose(); readGuard = null;
+            FileLabel.Text = "PST передан в Outlook: " + path;
+        }
+        SetBusy(true, "Открытие папки с письмами в Outlook…");
+        try
+        {
+            var opened = await OutlookPst.OpenAsync(path);
+            Status.Text = $"PST открыт в Outlook. Элементов: {opened.Messages}. Показана папка: {opened.FolderPath}";
+            if (opened.Messages == 0)
+                MessageBox.Show(this, "Outlook не нашёл элементов в этом PST. Проверьте, что выбран файл результата, указанный в отчёте.", "PST пуст", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception error) { ShowError(error, "Не удалось показать PST в Outlook."); }
+        finally { SetBusy(false); }
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -261,6 +296,7 @@ public partial class MainWindow : Window
         ConvertSelectedButton.IsEnabled = !value && sourcePath is not null && Messages.SelectedItem is Message;
         SaveAttachmentButton.IsEnabled = !value && Attachments.SelectedItem is Attachment { IsFile: true };
         ReportButton.IsEnabled = !value && lastReportPath is not null;
+        OpenOutlookButton.IsEnabled = !value;
         Progress.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
         Progress.IsIndeterminate = value;
         if (status is not null) Status.Text = status;

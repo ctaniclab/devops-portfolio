@@ -68,11 +68,11 @@ public static class OutlookConverter
             }
             if (targetRoot is null) throw new IOException("Outlook не подключил созданный PST.");
             targetRoot.Name = Path.GetFileNameWithoutExtension(target);
-            // Dedicated wrapper avoids colliding with default PST folders and keeps the source tree.
+            // Keep mail together under one visible folder, without OST service wrappers.
             using (var scope = new ComScope())
             {
                 dynamic folders = scope.Keep(targetRoot.Folders);
-                dynamic importedRoot = scope.Keep(folders.Add("Импорт OST", 6)); // olFolderInbox = mail folder
+                dynamic importedRoot = scope.Keep(folders.Add(ExportFolderLayout.ImportFolderName, 6)); // olFolderInbox
                 if (selection is null) CopyFolder(archive, root, importedRoot, report, progress, cancellation);
                 else
                 {
@@ -80,6 +80,7 @@ public static class OutlookConverter
                     var selectedMessage = selection.ResolveMessage(archive.ReadMessages(selectedFolder));
                     CopyMessages(archive, selectedFolder, (object)importedRoot, [selectedMessage], report, progress, cancellation);
                 }
+                PstInventory.Verify(report, OutlookPst.ReadFolderCounts((object)importedRoot));
             }
             cancellation.ThrowIfCancellationRequested();
             report.Completed = report.FolderErrors == 0;
@@ -115,8 +116,10 @@ public static class OutlookConverter
     }
 
     private static void CopyFolder(XstFile archive, Folder source, dynamic destination,
-        ConversionReport report, IProgress<ConversionProgress> progress, CancellationToken cancellation)
+        ConversionReport report, IProgress<ConversionProgress> progress, CancellationToken cancellation,
+        int depth = 0, HashSet<string>? destinationNames = null)
     {
+        destinationNames ??= new(StringComparer.OrdinalIgnoreCase);
         cancellation.ThrowIfCancellationRequested();
         var messages = FolderReadPolicy.Read(archive, source, report);
         CopyMessages(archive, source, (object)destination, messages, report, progress, cancellation);
@@ -125,12 +128,17 @@ public static class OutlookConverter
         foreach (var child in source.Folders)
         {
             cancellation.ThrowIfCancellationRequested();
+            if (ExportFolderLayout.IsWrapper(child, depth))
+            {
+                CopyFolder(archive, child, destination, report, progress, cancellation, depth + 1, destinationNames);
+                continue;
+            }
             using var scope = new ComScope();
             dynamic childFolder;
             try
             {
                 dynamic folders = scope.Keep(destination.Folders);
-                childFolder = scope.Keep(folders.Add(string.IsNullOrWhiteSpace(child.Name) ? "Без имени" : child.Name, 6));
+                childFolder = scope.Keep(folders.Add(ExportFolderLayout.UniqueName(child.Name, destinationNames), 6));
             }
             catch (COMException error)
             {
@@ -138,7 +146,7 @@ public static class OutlookConverter
                 report.Issues.Add(new(child.Path, "", "Outlook не создал папку: " + error.Message, "CreateFolder", error.ToString()));
                 continue;
             }
-            CopyFolder(archive, child, childFolder, report, progress, cancellation);
+            CopyFolder(archive, child, childFolder, report, progress, cancellation, depth + 1);
         }
     }
 
@@ -150,10 +158,11 @@ public static class OutlookConverter
             cancellation.ThrowIfCancellationRequested();
             report.Examined++;
             var stage = "ReadMessage";
+            string? messageClass = null;
             try
             {
                 archive.ReadMessageDetails(message);
-                var messageClass = ConvertString(message, 0x001A);
+                messageClass = ConvertString(message, 0x001A);
                 if (messageClass != "IPM.Note")
                     throw new UnsupportedMessageException("Не поддерживается тип элемента: " + (messageClass ?? "неизвестен"));
                 if (message.Attachments.Any(a => !a.IsFile))
@@ -176,7 +185,7 @@ public static class OutlookConverter
             catch (UnsupportedMessageException e)
             {
                 report.Skipped++;
-                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, "Unsupported"));
+                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, "Unsupported", ItemClass: messageClass));
             }
             catch (Exception e)
             {
@@ -268,18 +277,4 @@ public static class OutlookConverter
     private static string Dasl(uint tag) => "http://schemas.microsoft.com/mapi/proptag/0x" + tag.ToString("X8");
     private sealed class UnsupportedMessageException(string message) : Exception(message);
 
-    private sealed class ComScope : IDisposable
-    {
-        private readonly List<object> values = [];
-        public dynamic Keep(object value) { values.Add(value); return value; }
-        public void Dispose()
-        {
-            for (int i = values.Count - 1; i >= 0; i--)
-            {
-                try { if (Marshal.IsComObject(values[i])) Marshal.ReleaseComObject(values[i]); }
-                catch (InvalidComObjectException) { }
-            }
-            values.Clear();
-        }
-    }
 }
