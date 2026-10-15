@@ -111,7 +111,7 @@ public static class UiSelfCheck
                 VerifyTextContrast((Button)main.FindName("ReadMessageButton"));
                 VerifyTextContrast((CheckBox)main.FindName("ShowServiceFolders"));
                 VerifyTextContrast((ComboBox)main.FindName("ThemeChoice"));
-                if (!WindowTheme.IsApplied(main)) throw new IOException("Native window caption did not follow theme: " + theme);
+                if (!WindowTheme.IsApplied(main)) throw new IOException("Native window caption did not follow theme: " + theme + ". " + WindowTheme.Describe(main));
                 if (((DataGrid)main.FindName("Messages")).Items.Count != messageCount) throw new IOException("Theme switch changed the loaded mailbox.");
                 if (extraThemes.TryGetValue(theme, out var filename)) Capture(main, output + "." + filename + ".png");
                 verifiedThemes.Add(theme);

@@ -12,6 +12,8 @@ public static class WindowTheme
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
     [DllImport("dwmapi.dll", PreserveSig = true)]
     private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmIsCompositionEnabled([MarshalAs(UnmanagedType.Bool)] out bool enabled);
 
     public static void Attach(Window window) => window.SourceInitialized += (_, _) => Apply(window);
 
@@ -48,5 +50,17 @@ public static class WindowTheme
         return DwmGetWindowAttribute(handle, 35, out int caption, sizeof(int)) == 0 && caption == ColorRef(palette.Colors[0])
             && DwmGetWindowAttribute(handle, 36, out int text, sizeof(int)) == 0 && text == ColorRef(palette.Colors[2])
             && DwmGetWindowAttribute(handle, 34, out int border, sizeof(int)) == 0 && border == ColorRef(palette.Colors[6]);
+    }
+
+    public static string Describe(Window window)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        DwmIsCompositionEnabled(out bool composition);
+        return $"OS={Environment.OSVersion.Version}; composition={composition}; dark={DisplaySettings.IsDark}; "
+            + string.Join("; ", new[] { 19, 20, 34, 35, 36 }.Select(attribute =>
+            {
+                int result = DwmGetWindowAttribute(handle, attribute, out int value, sizeof(int));
+                return $"DWM{attribute}: HRESULT=0x{unchecked((uint)result):X8}, value=0x{unchecked((uint)value):X8}";
+            }));
     }
 }
