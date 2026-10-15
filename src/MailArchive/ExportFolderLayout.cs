@@ -4,7 +4,14 @@ namespace MailArchive;
 
 public static class ExportFolderLayout
 {
-    public const string ImportFolderName = "Перенесённая почта";
+    public static bool IsServiceBranch(Folder folder, int parentDepth)
+    {
+        if (parentDepth > 2) return false;
+        return new[] { "~MAPISP(Internal)", "Drizzle", "NON_IPM_SUBTREE", "Common Views", "Views", "Finder", "Shortcuts",
+            "Общие данные", "Общие представления", "Представления", "Система поиска", "Ярлыки",
+            "Sync Issues", "Sync Issues (This computer only)", "Ошибки синхронизации", "Ошибки синхронизации (только этот компьютер)" }
+            .Contains(folder.Name, StringComparer.OrdinalIgnoreCase);
+    }
 
     // OST service containers belong to the store, not to the visible mailbox tree.
     // Only unwrap the top of the archive; a user's nested folder named IPM_SUBTREE

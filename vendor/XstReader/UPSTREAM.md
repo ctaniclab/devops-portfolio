@@ -10,3 +10,7 @@ checksum/length validation), and preserve the full 64-bit BID. LTP handles empty
 uses the on-disk bitmap size, validates heap references, and accepts empty BTH roots.
 XstFile reads contents independently of cached counts, with explicit per-message header recovery from
 row IDs and diagnostic ReadIssue records when table columns are unreadable.
+
+Mail Archive 1.3.0 reads the optional PidTagContainerClass folder property to distinguish
+mail/IMAP containers from contacts, calendar and configuration items in the simplified viewer.
+Unknown classes remain traversable; actual contents tables, not cached counts, determine visibility.

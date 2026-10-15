@@ -21,8 +21,10 @@ public sealed class MailPreview : IDisposable
         {
             if (!initialized)
             {
-                var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailArchive", "WebView2");
-                var environment = await CoreWebView2Environment.CreateAsync(null, directory);
+                var compatible = DisplaySettings.Current.CompatibleRendering;
+                var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailArchive", compatible ? "WebView2-srgb-software" : "WebView2-srgb");
+                var options = new CoreWebView2EnvironmentOptions("--force-color-profile=srgb" + (compatible ? " --disable-gpu" : ""));
+                var environment = await CoreWebView2Environment.CreateAsync(null, directory, options);
                 await view.EnsureCoreWebView2Async(environment);
                 var core = view.CoreWebView2;
                 core.Settings.IsScriptEnabled = false;

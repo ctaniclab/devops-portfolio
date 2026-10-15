@@ -24,7 +24,7 @@ internal static class ExportChecks
         var second = ExportFolderLayout.UniqueName("inbox", used);
         check(first == "Inbox" && second == "inbox (2)" && used.Count == 2,
             "Equal folder names from separate store branches remain separate instead of overwriting mail");
-        var report = new ConversionReport { Converted = 109, Skipped = 3 };
+        var report = new ConversionReport { Converted = 109, ContentVerified = 109, Skipped = 3 };
         PstInventory.Verify(report, [new("PST/Перенесённая почта/Входящие", 65), new("PST/Перенесённая почта/Отправленные", 44)]);
         check(report.OutlookReadBackVerified && report.OutputMessagesVerified == 109, "Saved folder inventory accounts for every converted message");
         bool mismatchRejected = false;

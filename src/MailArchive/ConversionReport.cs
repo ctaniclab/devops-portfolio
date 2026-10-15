@@ -1,12 +1,16 @@
 namespace MailArchive;
 
 public sealed record PstFolderInfo(string Path, int Messages);
-public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null, string? ItemClass = null);
+public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null, string? ItemClass = null, string? ErrorCode = null);
 public sealed class ConversionReport
 {
-    public string AppVersion { get; set; } = "1.2.1";
+    public string AppVersion { get; set; } = "1.5.0";
     public string Mode { get; set; } = "Mailbox";
     public MessageSelection? Selection { get; set; }
+    public List<MessageSelection>? Selections { get; set; }
+    public string OutputFormat { get; set; } = "PST";
+    public List<string> MsgFiles { get; set; } = [];
+    public string? RetainedPartialDirectory { get; set; }
     public string Source { get; set; } = "";
     public string Destination { get; set; } = "";
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
@@ -18,6 +22,9 @@ public sealed class ConversionReport
     public int FolderErrors { get; set; }
     public int MetadataWarnings { get; set; }
     public int RtfBodiesConvertedToHtml { get; set; }
+    public int ContentVerified { get; set; }
+    public bool IncludeServiceFolders { get; set; }
+    public List<string> ExcludedServiceFolders { get; set; } = [];
     public int? OutputMessagesVerified { get; set; }
     public bool OutlookReadBackVerified { get; set; }
     public List<PstFolderInfo> OutputFolders { get; set; } = [];
@@ -32,5 +39,6 @@ public sealed class ConversionReport
         "В OST доступны только локально сохранённые данные. Отсутствующие на диске письма и вложения восстановить нельзя.",
         "Письма с вложенными сообщениями, OLE/ссылочными вложениями и S/MIME пропускаются с записью в отчёт.",
         "RTF переводится в HTML с сохранением доступного форматирования; вёрстка может отличаться от Outlook. Исходник остаётся в OST."
+        ,"Служебные транспортные заголовки и исходный флаг отправленного/неотправленного письма не перезаписываются через PropertyAccessor. Outlook может показывать восстановленное письмо как черновик; приложение ничего не отправляет."
     ];
 }

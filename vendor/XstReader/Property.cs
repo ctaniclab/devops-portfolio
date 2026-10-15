@@ -40,6 +40,7 @@ namespace XstReader
         // Folder
         PidTagContentCount = 0x3602,
         PidTagSubfolders = 0x360A,
+        PidTagContainerClass = 0x3613,
 
         // Message List
         PidTagSubjectW = 0x0037,
@@ -352,6 +353,7 @@ namespace XstReader
     {
         public XstFile XstFile { get; set; }
         public string Name { get; set; }
+        public string ContainerClass { get; set; }
         public uint ContentCount { get; set; } = 0;
         public bool HasSubFolders { get; set; } = false;
         internal NID Nid { get; set; }  // Where folder data is held

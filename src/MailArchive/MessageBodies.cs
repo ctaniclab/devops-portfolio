@@ -8,7 +8,7 @@ public static class MessageBodies
 {
     public static string Html(Message message)
     {
-        if (message.BodyHtml is not null) return message.BodyHtml;
+        if (!string.IsNullOrEmpty(message.BodyHtml)) return message.BodyHtml;
         if (message.Html is not { Length: > 0 } bytes) return message.Body ?? "";
         if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) return Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
         if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) return Encoding.Unicode.GetString(bytes).TrimStart('\uFEFF');

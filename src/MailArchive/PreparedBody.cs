@@ -11,7 +11,7 @@ public sealed record PreparedBody(string Html, string Text, bool ConvertedFromRt
         if (!string.IsNullOrEmpty(message.BodyHtml) || message.Html is { Length: > 0 })
         {
             var html = MessageBodies.Html(message);
-            return new(html, message.Body ?? ArchiveUtilities.HtmlToText(html), false);
+            return new(html, string.IsNullOrEmpty(message.Body) ? ArchiveUtilities.HtmlToText(html) : message.Body, false);
         }
         if (message.RtfCompressed is { Length: > 0 })
         {

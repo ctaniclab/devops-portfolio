@@ -9,7 +9,7 @@ internal static class DiagnosticLog
             var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailArchive", "Logs");
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, "error-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff") + ".txt");
-            File.WriteAllText(path, $"Mail Archive 1.1.0\nUTC: {DateTime.UtcNow:O}\n{context}\n\n{error}\n", System.Text.Encoding.UTF8);
+            File.WriteAllText(path, $"Mail Archive {typeof(App).Assembly.GetName().Version}\nUTC: {DateTime.UtcNow:O}\n{context}\n\n{error}\n", System.Text.Encoding.UTF8);
             return path;
         }
         catch { return null; } // Do not mask the original error if logging is unavailable.
