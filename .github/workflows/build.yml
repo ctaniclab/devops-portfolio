@@ -45,7 +45,7 @@ jobs:
             throw 'Published EXE self-check failed.'
           }
           $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified -or -not $result.ReaderWindowVerified -or -not $result.ThemedScrollBarsVerified -or -not $result.ExportWizardVerified -or -not $result.AllThemesVerified -or -not $result.NativeCaptionApiAccepted -or -not $result.NativeDarkModeVerified) { throw 'Email HTML rendering or application UI was not verified.' }
+          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified -or -not $result.ReaderWindowVerified -or -not $result.ThemedScrollBarsVerified -or -not $result.ExportWizardVerified -or -not $result.AllThemesVerified -or -not $result.NativeCaptionApiAccepted -or -not $result.NativeDarkModeVerified -or -not $result.GlassFallbackVerified -or -not $result.ConversionProgressUiVerified) { throw 'Email HTML rendering or application UI was not verified.' }
           Copy-Item $report dist/preview-report.json
           Copy-Item "$report.png" dist/ui-preview.png
           Copy-Item "$report.dark.png" dist/ui-dark.png
@@ -53,18 +53,21 @@ jobs:
           Copy-Item "$report.wizard.png" dist/ui-export-wizard.png
           Copy-Item "$report.classic.window.png" dist/ui-classic-window.png
           Copy-Item "$report.space.window.png" dist/ui-space-window.png
-          foreach ($theme in @('classic', 'glass', 'space', 'ocean')) { Copy-Item "$report.$theme.png" "dist/ui-$theme.png" }
+          foreach ($theme in @('liquid', 'transparent', 'aurora', 'neon', 'terminal')) { Copy-Item "$report.$theme.window.png" "dist/ui-$theme-window.png" }
+          Copy-Item "$report.liquid-fallback.png" dist/ui-liquid-fallback.png
+          Copy-Item "$report.progress.png" dist/ui-progress.png
+          foreach ($theme in @('classic', 'liquid', 'transparent', 'space', 'ocean', 'aurora', 'neon', 'terminal')) { Copy-Item "$report.$theme.png" "dist/ui-$theme.png" }
       - name: Prepare release assets
         shell: pwsh
         run: |
-          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.4.0.exe
-          (Get-FileHash dist/MailArchive-1.4.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.4.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.4.0.exe.sha256
+          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.5.0.exe
+          (Get-FileHash dist/MailArchive-1.5.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.5.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.5.0.exe.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: MailArchive-1.4.0-verified
+          name: MailArchive-1.5.0-verified
           path: |
-            dist/MailArchive-1.4.0.exe
-            dist/MailArchive-1.4.0.exe.sha256
+            dist/MailArchive-1.5.0.exe
+            dist/MailArchive-1.5.0.exe.sha256
             dist/MailArchive-win-x64.zip
             dist/defender-report.json
             dist/defender-report.json.txt
@@ -74,7 +77,18 @@ jobs:
             dist/ui-reader.png
             dist/ui-export-wizard.png
             dist/ui-classic.png
-            dist/ui-glass.png
+            dist/ui-liquid.png
+            dist/ui-transparent.png
+            dist/ui-aurora.png
+            dist/ui-neon.png
+            dist/ui-terminal.png
+            dist/ui-liquid-window.png
+            dist/ui-transparent-window.png
+            dist/ui-aurora-window.png
+            dist/ui-neon-window.png
+            dist/ui-terminal-window.png
+            dist/ui-liquid-fallback.png
+            dist/ui-progress.png
             dist/ui-space.png
             dist/ui-ocean.png
             dist/ui-classic-window.png
@@ -92,7 +106,18 @@ jobs:
             dist/ui-reader.png
             dist/ui-export-wizard.png
             dist/ui-classic.png
-            dist/ui-glass.png
+            dist/ui-liquid.png
+            dist/ui-transparent.png
+            dist/ui-aurora.png
+            dist/ui-neon.png
+            dist/ui-terminal.png
+            dist/ui-liquid-window.png
+            dist/ui-transparent-window.png
+            dist/ui-aurora-window.png
+            dist/ui-neon-window.png
+            dist/ui-terminal-window.png
+            dist/ui-liquid-fallback.png
+            dist/ui-progress.png
             dist/ui-space.png
             dist/ui-ocean.png
             dist/ui-classic-window.png
@@ -108,7 +133,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: MailArchive-1.4.0-verified
+          name: MailArchive-1.5.0-verified
           path: release
       - name: Publish only after tests, preview and Defender passed
         env:
@@ -116,8 +141,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          if gh release view v1.4.0 >/dev/null 2>&1; then
-            echo 'Version v1.4.0 already exists; existing assets will not be overwritten.'
+          if gh release view v1.5.0 >/dev/null 2>&1; then
+            echo 'Version v1.5.0 already exists; existing assets will not be overwritten.'
             exit 0
           fi
-          gh release create v1.4.0 --target '${{ github.sha }}' --title 'Mail Archive 1.4.0' --notes 'MSG exports preserve original mailbox folders and subfolders under a source-named directory; PST folders sit directly under the archive name. Native window captions follow the selected theme. PST import now uses verified standalone MSG plus explicit Move and fresh destination EntryID; reports include precise stages and HRESULTs. Classic, glass, space and ocean visual themes with contrast checks. Multiple-message selection and PST/Unicode MSG format wizard, separate reading window, light/dark themes, sRGB software rendering compatibility, rounded scrollbars, removal of empty export folders, and content-level Outlook read-back verification. Real HDR monitor behavior and Outlook automation are not validated on hosted CI. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*
+          gh release create v1.5.0 --target '${{ github.sha }}' --title 'Mail Archive 1.5.0' --notes 'Distinct paper, classic, liquid glass, transparent, space, ocean, aurora, neon and terminal themes with native Windows 11 Desktop Acrylic and readable opaque fallback. Conversion percentage, elapsed time and adaptive ETA. MSG exports preserve original mailbox folders and subfolders under a source-named directory; PST folders sit directly under the archive name. Native window captions follow the selected theme. PST import now uses verified standalone MSG plus explicit Move and fresh destination EntryID; reports include precise stages and HRESULTs. Classic, glass, space and ocean visual themes with contrast checks. Multiple-message selection and PST/Unicode MSG format wizard, separate reading window, light/dark themes, sRGB software rendering compatibility, rounded scrollbars, removal of empty export folders, and content-level Outlook read-back verification. Real HDR monitor behavior and Outlook automation are not validated on hosted CI. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*

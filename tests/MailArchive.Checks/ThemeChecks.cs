@@ -22,8 +22,8 @@ internal static class ThemeChecks
         {
             var palette = ThemePalette.Get(name);
             bool readable = true;
-            foreach (string backdrop in new[] { palette.Colors[0], palette.GradientEnd ?? palette.Colors[0] })
-                foreach (int background in new[] { 0, 1, 5, 7, 11 })
+            foreach (string backdrop in new[] { palette.Colors[0], palette.GradientEnd ?? palette.Colors[0] }.Concat(palette.NativeGlass ? new[] { "#000000", "#FFFFFF" } : Array.Empty<string>()))
+                foreach (int background in palette.NativeGlass ? new[] { 1, 5, 7, 11 } : new[] { 0, 1, 5, 7, 11 })
                     foreach (int foreground in new[] { 2, 3 })
                         readable &= Contrast(Color(palette.Colors[foreground]), Over(Color(palette.Colors[background]), Color(backdrop))) >= 4.5;
             check(readable && Contrast(Color("#FFFFFF"), Color(palette.Colors[4])) >= 4.5,
@@ -31,7 +31,14 @@ internal static class ThemeChecks
         }
         check(ThemePalette.Get("Космос").Dark && ThemePalette.Get("Системная", true).Dark && !ThemePalette.Get("Классическая").Dark,
             "Space uses a dark reader; classic and system themes select the intended palette");
-        check(ThemePalette.Get("Стекло").Colors[1].Length == 9 && ThemePalette.Get("Классическая").ButtonRadius == 12,
-            "Glass keeps translucent panels and classic restores the original rounded button style");
+        check(ThemePalette.Migrate("Стекло") == "Liquid Glass" && ThemePalette.Get("Liquid Glass").NativeGlass && ThemePalette.Get("Прозрачная").NativeGlass,
+            "Old glass selection migrates to Liquid Glass and both glass themes request native transparency");
+        check(ThemePalette.Get("Светлая").TitleFont == "Georgia" && ThemePalette.Get("Светлая").CardRadius == 4
+            && ThemePalette.Get("Классическая").CardRadius == 16 && ThemePalette.Get("Классическая").ButtonRadius == 12,
+            "Paper and classic differ in typography, geometry and palette while classic preserves the old style");
+        check(ThemePalette.Get("Терминал").Font == "Consolas" && ThemePalette.Get("Терминал").CardRadius == 0
+            && ThemePalette.Get("Аврора").Scene == ThemeScene.Aurora && ThemePalette.Get("Неон").Scene == ThemeScene.Neon
+            && ThemePalette.Get("Океан").Scene == ThemeScene.Ocean,
+            "Terminal, aurora, neon and ocean use distinct typography, geometry and original vector scenery");
     }
 }

@@ -4,7 +4,7 @@ public sealed record PstFolderInfo(string Path, int Messages);
 public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null, string? ItemClass = null, string? ErrorCode = null);
 public sealed class ConversionReport
 {
-    public string AppVersion { get; set; } = "1.4.0";
+    public string AppVersion { get; set; } = "1.5.0";
     public string Mode { get; set; } = "Mailbox";
     public MessageSelection? Selection { get; set; }
     public List<MessageSelection>? Selections { get; set; }

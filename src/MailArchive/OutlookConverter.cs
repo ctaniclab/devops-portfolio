@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 
 namespace MailArchive;
 
-public sealed record ConversionProgress(int Examined, int Converted, int Failed, int Skipped, string Folder);
+public sealed record ConversionProgress(int Examined, int Converted, int Failed, int Skipped, string Folder, int? Total = null, bool Finalizing = false);
 public sealed record ConversionResult(ConversionReport Report, string ReportPath);
 public enum ExportFormat { Pst, Msg }
 
@@ -70,11 +70,13 @@ public static class OutlookConverter
             dynamic app = session.Keep(Activator.CreateInstance(type)!);
             outlookNamespace = session.Keep(app.GetNamespace("MAPI"));
             var writer = new MailWriterContext((object)app, (object)outlookNamespace, format, target,
-                format == ExportFormat.Msg ? new MsgFolderLayout(root) : null);
+                format == ExportFormat.Msg ? new MsgFolderLayout(root) : null, chosen?.Distinct().Count());
+            progress.Report(new(0, 0, 0, 0, "Подготовка Outlook", writer.Total));
             if (format == ExportFormat.Msg)
             {
                 Directory.CreateDirectory(target);
                 CopyFolder(archive, root, () => new object(), report, progress, cancellation, writer, selectedIds);
+                progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, "Проверка результата", writer.Total, true));
                 report.OutputMessagesVerified = report.MsgFiles.Count;
                 report.OutlookReadBackVerified = report.Converted > 0 && report.ContentVerified == report.Converted && report.MsgFiles.Count == report.Converted;
                 report.Completed = report.FolderErrors == 0 && report.Failed == 0 && report.OutlookReadBackVerified;
@@ -102,6 +104,7 @@ public static class OutlookConverter
             targetRoot.Name = Path.GetFileNameWithoutExtension(target);
             // Mail folders sit directly under the named archive, without an extra import wrapper.
             CopyFolder(archive, root, () => (object)targetRoot, report, progress, cancellation, writer, selectedIds);
+            progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, "Проверка PST", writer.Total, true));
             PstInventory.Verify(report, OutlookPst.ReadFolderCounts((object)targetRoot));
             cancellation.ThrowIfCancellationRequested();
             report.Completed = report.FolderErrors == 0 && report.Failed == 0;
@@ -242,11 +245,11 @@ public static class OutlookConverter
                 report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, stage, e.ToString(), ErrorCode: "0x" + unchecked((uint)e.HResult).ToString("X8")));
             }
             finally { message.ClearContents(); message.Properties.Clear(); message.Recipients.Clear(); }
-            progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, source.Path));
+            progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, source.Path, writer.Total));
         }
     }
 
-    private sealed record MailWriterContext(object App, object Session, ExportFormat Format, string Target, MsgFolderLayout? MsgFolders);
+    private sealed record MailWriterContext(object App, object Session, ExportFormat Format, string Target, MsgFolderLayout? MsgFolders, int? Total);
 
     private static void WriteMessage(XstFile archive, Message message, object? target, PreparedBody body, MailWriterContext writer, string? msgPath,
         Action<string, Exception> metadataWarning, Action<string> stage)

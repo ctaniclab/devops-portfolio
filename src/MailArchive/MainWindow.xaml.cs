@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using XstReader;
 using Message = XstReader.Message;
@@ -23,6 +24,10 @@ public partial class MainWindow : Window
     private string? lastReportPath;
     private string? lastOutputPath;
     private string? lastMsgDirectory;
+    private readonly Stopwatch conversionWatch = new();
+    private readonly DispatcherTimer conversionTicker = new() { Interval = TimeSpan.FromSeconds(1) };
+    private ConversionEstimate? conversionEstimate;
+    private ConversionProgress? lastConversionProgress;
 
     public MainWindow()
     {
@@ -31,7 +36,11 @@ public partial class MainWindow : Window
         ThemeChoice.ItemsSource = ThemePalette.Names;
         ThemeChoice.SelectedItem = DisplaySettings.Current.Theme;
         CompatibleRendering.IsChecked = DisplaySettings.Current.CompatibleRendering;
+        GlassEffects.IsChecked = DisplaySettings.Current.GlassEffects;
         initializing = false;
+        Activated += (_, _) => UpdateThemeHint();
+        UpdateThemeHint();
+        conversionTicker.Tick += (_, _) => UpdateConversionTiming();
     }
 
     private void Theme_Changed(object sender, SelectionChangedEventArgs e)
@@ -44,11 +53,24 @@ public partial class MainWindow : Window
         if (initializing) return;
         DisplaySettings.Current.CompatibleRendering = CompatibleRendering.IsChecked == true; ApplyDisplay();
     }
+    private void GlassEffects_Changed(object sender, RoutedEventArgs e)
+    {
+        if (initializing) return;
+        DisplaySettings.Current.GlassEffects = GlassEffects.IsChecked == true; ApplyDisplay();
+    }
     private void ApplyDisplay()
     {
         DisplaySettings.Apply();
+        UpdateThemeHint();
         var error = DisplaySettings.Save();
         if (error is not null) Status.Text = error;
+    }
+    private void UpdateThemeHint()
+    {
+        var palette = ThemePalette.Get(DisplaySettings.Current.Theme, DisplaySettings.IsDark);
+        var effect = WindowTheme.BackdropFor(this);
+        GlassEffects.Visibility = palette.NativeGlass ? Visibility.Visible : Visibility.Collapsed;
+        ThemeHint.Text = palette.NativeGlass ? effect.Message : palette.Description;
     }
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
@@ -191,9 +213,19 @@ public partial class MainWindow : Window
         }
         ModeTabs.SelectedIndex = 1;
         conversion = new CancellationTokenSource(); SetBusy(true, "Outlook сохраняет выбранные письма…"); CancelButton.IsEnabled = true;
+        conversionEstimate = new(); conversionWatch.Restart();
+        lastConversionProgress = new(0, 0, 0, 0, "", wizard.Selected.Distinct().Count());
+        conversionTicker.Start(); UpdateConversionTiming();
         try
         {
-            var progress = new Progress<ConversionProgress>(p => Status.Text = $"Обработано: {p.Examined} · Сохранено и проверено: {p.Converted} · Пропущено: {p.Skipped} · Ошибок: {p.Failed}");
+            var progress = new Progress<ConversionProgress>(p =>
+            {
+                if (conversionEstimate is null) return;
+                lastConversionProgress = p;
+                Status.Text = $"Обработано: {p.Examined}" + (p.Total is int total ? $" / {total}" : "")
+                    + $" · Сохранено и проверено: {p.Converted} · Пропущено: {p.Skipped} · Ошибок: {p.Failed}";
+                UpdateConversionTiming();
+            });
             var result = await OutlookConverter.ConvertAsync(sourcePath, target, progress, conversion.Token, includeServiceFolders: includeService, selections: wizard.Selected, format: wizard.Format);
             var report = result.Report; SetReport(result.ReportPath);
             if (report.OutputFormat == "PST" && File.Exists(report.Destination)) lastOutputPath = report.Destination;
@@ -207,11 +239,28 @@ public partial class MainWindow : Window
                 + (report.MetadataWarnings > 0 ? $"Предупреждений о необязательных полях: {report.MetadataWarnings} (подробности в отчёте).\n" : "")
                 + "Результат: " + report.Destination + "\n"
                 + (report.FatalError is null ? "" : "\n" + report.FatalError);
-            Status.Text = heading + ". " + (report.Converted > 0 ? "Откройте результат кнопкой в шаге 3." : "Проверьте причины в отчёте.");
+            Status.Text = (report.Completed ? "100 % · " : "") + heading + " · Прошло " + ConversionEstimateValue.Duration(conversionWatch.Elapsed) + ". " + (report.Converted > 0 ? "Откройте результат кнопкой в шаге 3." : "Проверьте причины в отчёте.");
             if (!report.Completed && report.FatalError is not null) MessageBox.Show(this, report.FatalError + "\n\nПодробности доступны в отчёте. Исходный архив не изменён.", "Проверка результата", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception error) { ShowError(error, "Не удалось выполнить перенос."); }
-        finally { conversion.Dispose(); conversion = null; CancelButton.IsEnabled = false; SetBusy(false); }
+        finally { conversionTicker.Stop(); conversionWatch.Stop(); conversionEstimate = null; conversion.Dispose(); conversion = null; CancelButton.IsEnabled = false; SetBusy(false); }
+    }
+    private void UpdateConversionTiming()
+    {
+        if (conversionEstimate is null || lastConversionProgress is not { } p) return;
+        var estimate = conversionEstimate.Observe(p.Examined, p.Total, conversionWatch.Elapsed, p.Finalizing);
+        RenderConversionEstimate(estimate);
+    }
+    private void RenderConversionEstimate(ConversionEstimateValue estimate)
+    {
+        Progress.IsIndeterminate = estimate.Percent is null;
+        Progress.Value = estimate.Percent ?? 0;
+        ConversionTiming.Text = estimate.Label;
+    }
+    internal void ShowProgressForCheck(ConversionEstimateValue estimate)
+    {
+        ProgressRow.Visibility = Visibility.Visible;
+        RenderConversionEstimate(estimate);
     }
     private async void OpenOutlook_Click(object sender, RoutedEventArgs e)
     {
@@ -252,7 +301,8 @@ public partial class MainWindow : Window
         ExportButton.IsEnabled = OpenResultFolderButton.IsEnabled = !value;
         ReadMessageButton.IsEnabled = !value && Messages.SelectedItem is Message;
         ReportButton.IsEnabled = !value && lastReportPath is not null;
-        Progress.Visibility = value ? Visibility.Visible : Visibility.Collapsed; Progress.IsIndeterminate = value;
+        ProgressRow.Visibility = value ? Visibility.Visible : Visibility.Collapsed; Progress.IsIndeterminate = value;
+        if (conversionEstimate is null) ConversionTiming.Text = "";
         if (status is not null) Status.Text = status;
     }
     private void ShowError(Exception error, string context)

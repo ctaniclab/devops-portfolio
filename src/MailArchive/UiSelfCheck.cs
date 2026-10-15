@@ -88,13 +88,15 @@ public static class UiSelfCheck
         MainWindow? main = null; MessageWindow? reader = null;
         bool mainVerified = false, readerVerified = false, scrollbarsVerified = false, htmlVerified = false, wizardVerified = false, captionVerified = false;
         var verifiedThemes = new List<string>();
+        var backdrops = new Dictionary<string, WindowTheme.BackdropState>();
+        bool glassFallbackVerified = false, progressUiVerified = false;
         string? error = null; int exit = 1;
         try
         {
             main = new MainWindow { Width = 1000, Height = 680 }; main.Show();
             await main.Dispatcher.InvokeAsync(main.UpdateLayout, DispatcherPriority.ApplicationIdle);
             var open = (Button)main.FindName("OpenButton"); open.ApplyTemplate();
-            if (((Border)open.Template.FindName("Chrome", open)).CornerRadius.TopLeft < 8
+            if (((Border)open.Template.FindName("Chrome", open)).CornerRadius.TopLeft != ThemePalette.Get("Светлая").ButtonRadius
                 || ((Image)main.FindName("HeaderArt")).Source is not BitmapSource { PixelWidth: >= 256 }) throw new IOException("Main window resources were not loaded.");
             if (fixture is not null && !await main.LoadForCheckAsync(fixture)) throw new IOException("Actual archive viewing failed.");
             Capture(main, output + ".png");
@@ -103,7 +105,7 @@ public static class UiSelfCheck
             await main.Dispatcher.InvokeAsync(main.UpdateLayout, DispatcherPriority.ApplicationIdle);
             Capture(main, output + ".dark.png"); mainVerified = true;
             int messageCount = ((DataGrid)main.FindName("Messages")).Items.Count;
-            var extraThemes = new Dictionary<string, string> { ["Классическая"] = "classic", ["Стекло"] = "glass", ["Космос"] = "space", ["Океан"] = "ocean" };
+            var extraThemes = new Dictionary<string, string> { ["Классическая"] = "classic", ["Liquid Glass"] = "liquid", ["Прозрачная"] = "transparent", ["Космос"] = "space", ["Океан"] = "ocean", ["Аврора"] = "aurora", ["Неон"] = "neon", ["Терминал"] = "terminal" };
             foreach (var theme in ThemePalette.Names)
             {
                 ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = theme;
@@ -111,17 +113,43 @@ public static class UiSelfCheck
                 VerifyTextContrast((Button)main.FindName("ReadMessageButton"));
                 VerifyTextContrast((CheckBox)main.FindName("ShowServiceFolders"));
                 VerifyTextContrast((ComboBox)main.FindName("ThemeChoice"));
+                var expectedPalette = ThemePalette.Get(theme, DisplaySettings.IsDark);
+                if (((Border)open.Template.FindName("Chrome", open)).CornerRadius.TopLeft != expectedPalette.ButtonRadius || main.FontFamily.Source != expectedPalette.Font)
+                    throw new IOException("Theme geometry/font did not change: " + theme);
                 if (!WindowTheme.IsConfigured(main)) throw new IOException("Native window caption did not follow theme: " + theme + ". " + WindowTheme.Describe(main));
+                backdrops[theme] = WindowTheme.BackdropFor(main);
+                if (expectedPalette.NativeGlass && backdrops[theme].HResult != 0) throw new IOException("Windows backdrop API failed: " + backdrops[theme]);
                 if (((DataGrid)main.FindName("Messages")).Items.Count != messageCount) throw new IOException("Theme switch changed the loaded mailbox.");
                 if (extraThemes.TryGetValue(theme, out var filename))
                 {
                     Capture(main, output + "." + filename + ".png");
-                    if (theme is "Классическая" or "Космос") NativeWindowCapture.Save(main, output + "." + filename + ".window.png");
+                    NativeWindowCapture.Save(main, output + "." + filename + ".window.png");
                 }
                 verifiedThemes.Add(theme);
             }
             ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
             captionVerified = true;
+            ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Liquid Glass";
+            ((CheckBox)main.FindName("GlassEffects")).IsChecked = false;
+            if (WindowTheme.BackdropFor(main).Active || !ReferenceEquals(main.Background, Application.Current.Resources["CanvasOpaque"]))
+                throw new IOException("Disabling glass failed to restore an opaque readable window.");
+            Capture(main, output + ".liquid-fallback.png");
+            ((CheckBox)main.FindName("GlassEffects")).IsChecked = true;
+            var backdrop = WindowTheme.BackdropFor(main);
+            if (!backdrop.Requested || (backdrop.Active && backdrop.HResult != 0)) throw new IOException("Native glass backdrop configuration failed.");
+            ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Космос";
+            if (WindowTheme.BackdropFor(main).Active || !ReferenceEquals(main.Background, Application.Current.Resources["CanvasOpaque"]))
+                throw new IOException("Switching away from glass retained a transparent backdrop.");
+            glassFallbackVerified = true;
+            var timing = new ConversionEstimate();
+            timing.Observe(1, 10, TimeSpan.FromSeconds(20));
+            main.ShowProgressForCheck(timing.Observe(2, 10, TimeSpan.FromSeconds(22)));
+            if (((ProgressBar)main.FindName("Progress")).IsIndeterminate || !((TextBlock)main.FindName("ConversionTiming")).Text.Contains("20 %"))
+                throw new IOException("Determinate conversion percentage and ETA were not visible.");
+            progressUiVerified = true;
+            Capture(main, output + ".progress.png");
+            ((Grid)main.FindName("ProgressRow")).Visibility = Visibility.Collapsed;
+            ((ComboBox)main.FindName("ThemeChoice")).SelectedItem = "Тёмная";
             var message = new Message { Subject = "Тест чтения письма", From = "Демонстрация интерфейса", BodyHtml = "<table><tr><td>Тест письма</td></tr></table><p><b>Форматирование и кириллица</b></p><script>document.body.innerText='unsafe'</script>" + string.Concat(Enumerable.Range(1, 45).Select(i => "<p>Демонстрационный текст письма " + i + "</p>")) };
             reader = new MessageWindow(null, message) { Owner = main, Width = 820, Height = 640 };
             var view = (Microsoft.Web.WebView2.Wpf.WebView2)reader.FindName("HtmlPreview");
@@ -182,11 +210,12 @@ public static class UiSelfCheck
         finally
         {
             reader?.Close(); main?.Close();
-            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.4.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
+            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.5.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
                 HtmlRenderingVerified = htmlVerified, ThemedScrollBarsVerified = scrollbarsVerified, ExportWizardVerified = wizardVerified,
                 ThemesVerified = verifiedThemes, AllThemesVerified = verifiedThemes.Count == ThemePalette.Names.Count,
                 NativeCaptionApiAccepted = captionVerified, NativeDarkModeVerified = captionVerified,
                 NativeCaptionColorReadBackAvailable = false,
+                GlassFallbackVerified = glassFallbackVerified, ConversionProgressUiVerified = progressUiVerified, Backdrops = backdrops,
                 HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
             Application.Current.Shutdown(exit);
         }
