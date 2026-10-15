@@ -82,7 +82,8 @@ public static class OutlookPst
         if (root is null) throw new IOException("Outlook не подключил выбранный PST.");
 
         var folders = ReadFolderCounts(root);
-        var first = folders.FirstOrDefault();
+        var first = folders.OrderByDescending(f => new[] { "Inbox", "Входящие" }.Contains(f.Path.Split('\\').Last(), StringComparer.OrdinalIgnoreCase))
+            .ThenByDescending(f => f.Messages).FirstOrDefault();
         object FindFolder(object parent)
         {
             dynamic folder = parent;

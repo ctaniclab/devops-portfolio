@@ -1,0 +1,26 @@
+<Window x:Class="MailArchive.ExportWizard" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Конвертация сообщений — Mail Archive" Icon="Assets/archive-hero.png" Width="1040" Height="760" MinWidth="880" MinHeight="620" Background="{DynamicResource Canvas}" Foreground="{DynamicResource Ink}" FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="Grayscale" WindowStartupLocation="CenterOwner" Closing="Wizard_Closing">
+  <DockPanel Margin="20">
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14"><TextBlock x:Name="StepTitle" Text="1. Какие сообщения конвертировать?" FontSize="24" FontWeight="SemiBold"/><TextBlock x:Name="StepHint" Text="Загрузка списка сообщений…" Margin="0,8,0,0" Foreground="{DynamicResource MutedInk}" TextWrapping="Wrap"/></StackPanel>
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,14,0,0"><WrapPanel DockPanel.Dock="Right"><Button x:Name="BackButton" Content="Назад" Click="Back_Click" Visibility="Collapsed"/><Button x:Name="NextButton" Content="Далее: выбрать формат" Click="Next_Click" IsEnabled="False" Background="{DynamicResource Accent}" Foreground="White"/><Button Content="Отмена" Click="Cancel_Click" Margin="0"/></WrapPanel><TextBlock x:Name="CountText" Text="" VerticalAlignment="Center" Foreground="{DynamicResource MutedInk}"/></DockPanel>
+    <Grid>
+      <Border x:Name="SelectionStep" Style="{StaticResource Card}" Padding="10"><DockPanel>
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10"><WrapPanel Margin="0,0,0,10"><Button x:Name="AllButton" Content="Выбрать все" Click="All_Click" IsEnabled="False"/><Button x:Name="NoneButton" Content="Снять выделение" Click="None_Click" IsEnabled="False"/><Button x:Name="FoundButton" Content="Выбрать найденные" Click="Found_Click" IsEnabled="False"/></WrapPanel><TextBlock Text="Поиск по теме, отправителю или папке" Foreground="{DynamicResource MutedInk}" FontSize="12" Margin="2,0,0,6"/><TextBox x:Name="MessageSearch" TextChanged="Search_Changed" ToolTip="Поиск по теме, отправителю или папке" AutomationProperties.Name="Поиск сообщений для конвертации"/></StackPanel>
+        <DataGrid x:Name="MessageChoices" AutoGenerateColumns="False" CanUserAddRows="False" EnableRowVirtualization="True" SelectionMode="Single">
+          <DataGrid.Columns>
+            <DataGridTemplateColumn Header="✓" Width="48"><DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding Chosen,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" HorizontalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+            <DataGridTextColumn Header="Тема" Binding="{Binding Subject}" IsReadOnly="True" Width="*"/>
+            <DataGridTextColumn Header="Отправитель" Binding="{Binding Sender}" IsReadOnly="True" Width="200"/>
+            <DataGridTextColumn Header="Папка" Binding="{Binding Folder}" IsReadOnly="True" Width="180"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </DockPanel></Border>
+      <Border x:Name="FormatStep" Style="{StaticResource Card}" Visibility="Collapsed"><StackPanel>
+        <RadioButton x:Name="PstChoice" Content="PST — один архив для Outlook" IsChecked="True" FontSize="18" FontWeight="SemiBold" Margin="6,12"/>
+        <TextBlock Text="Все отмеченные сообщения и вложения будут сохранены в одном новом PST. Папки с выбранной почтой сохраняются." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="30,0,12,24"/>
+        <RadioButton x:Name="MsgChoice" Content="MSG — отдельный файл для каждого письма" FontSize="18" FontWeight="SemiBold" Margin="6,12"/>
+        <TextBlock Text="Выберите папку на компьютере. Внутри будет создана новая папка с файлами .msg. Одинаковые темы писем не приводят к перезаписи." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="30,0,12,24"/>
+        <TextBlock Text="Оба формата создаются через установленный классический Outlook. Для каждого результата проверяются тема, текст, получатели и файловые вложения." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="6,12"/>
+      </StackPanel></Border>
+    </Grid>
+  </DockPanel>
+</Window>

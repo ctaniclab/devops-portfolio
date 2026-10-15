@@ -20,6 +20,7 @@ void Reject(Action action, string name)
 ReaderRegressionChecks.Run(Check);
 FeatureChecks.Run(Check);
 ExportChecks.Run(Check);
+ContentChecks.Run(Check);
 var recoveryReport = new ConversionReport();
 var unreadable = FolderReadPolicy.Read(() => throw new IndexOutOfRangeException("bad table"),
     () => [], "Входящие", recoveryReport);
@@ -73,6 +74,12 @@ foreach (var path in args)
     var before = SHA256.HashData(File.ReadAllBytes(path));
     var file = new XstFile(path);
     var root = file.ReadFolderTree();
+    var outline = ArchiveOutline.Read(file, root, false);
+    IEnumerable<ArchiveFolder> OutlineNodes(ArchiveFolder folder)
+    { yield return folder; foreach (var child in folder.Children) foreach (var descendant in OutlineNodes(child)) yield return descendant; }
+    var indexed = outline.Folders.SelectMany(OutlineNodes).ToList();
+    Check(indexed.Any(f => f.Messages > 0) && indexed.All(f => f.Messages > 0 || f.Children.Count > 0 || f.ReadWarning), "Actual archive outline omits empty leaves while preserving mail and unreadable folders");
+    if (path.EndsWith(".ost", StringComparison.OrdinalIgnoreCase)) Check(indexed.Any(f => f.Source.ContainerClass == "IPF.Imap" && f.Messages > 0), "IMAP mail containers remain visible in the simplified archive tree");
     IEnumerable<Folder> AllFolders(Folder folder)
     {
         yield return folder;

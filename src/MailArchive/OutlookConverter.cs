@@ -4,22 +4,25 @@ using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using XstReader;
 using Message = XstReader.Message;
+using System.Security.Cryptography;
 
 namespace MailArchive;
 
 public sealed record ConversionProgress(int Examined, int Converted, int Failed, int Skipped, string Folder);
 public sealed record ConversionResult(ConversionReport Report, string ReportPath);
+public enum ExportFormat { Pst, Msg }
 
 // Outlook automation must stay on one STA thread, never on the UI thread or a thread-pool thread.
 public static class OutlookConverter
 {
     public static Task<ConversionResult> ConvertAsync(string source, string target,
-        IProgress<ConversionProgress> progress, CancellationToken cancellation, MessageSelection? selection = null)
+        IProgress<ConversionProgress> progress, CancellationToken cancellation, MessageSelection? selection = null, bool includeServiceFolders = false,
+        IReadOnlyList<MessageSelection>? selections = null, ExportFormat format = ExportFormat.Pst)
     {
         var completion = new TaskCompletionSource<ConversionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
-            try { completion.SetResult(Convert(source, target, progress, cancellation, selection)); }
+            try { completion.SetResult(Convert(source, target, progress, cancellation, selection, includeServiceFolders, selections, format)); }
             catch (Exception e) { completion.SetException(e); }
         }) { IsBackground = true, Name = "Outlook PST writer" };
         thread.SetApartmentState(ApartmentState.STA);
@@ -28,13 +31,19 @@ public static class OutlookConverter
     }
 
     private static ConversionResult Convert(string source, string target,
-        IProgress<ConversionProgress> progress, CancellationToken cancellation, MessageSelection? selection)
+        IProgress<ConversionProgress> progress, CancellationToken cancellation, MessageSelection? selection, bool includeServiceFolders,
+        IReadOnlyList<MessageSelection>? selections, ExportFormat format)
     {
-        ArchiveUtilities.ValidateDestination(source, target);
+        if (format == ExportFormat.Pst) ArchiveUtilities.ValidateDestination(source, target);
+        else ArchiveUtilities.ValidateMsgDestination(target);
+        var chosen = selections ?? (selection is null ? null : new[] { selection });
+        if (chosen is { Count: 0 }) throw new InvalidOperationException("Не выбрано ни одного сообщения.");
+        var selectedIds = chosen?.Distinct().GroupBy(s => s.FolderId).ToDictionary(g => g.Key, g => g.Select(s => s.MessageId).ToHashSet());
         var id = Guid.NewGuid().ToString("N");
         var reportPath = target + "." + id + ".conversion.json";
         var report = new ConversionReport { Source = source, Destination = target,
-            Mode = selection is null ? "Mailbox" : "SelectedMessage", Selection = selection };
+            Mode = chosen is null ? "Mailbox" : chosen.Count == 1 ? "SelectedMessage" : "SelectedMessages", Selection = selection,
+            Selections = chosen?.Distinct().ToList(), OutputFormat = format.ToString().ToUpperInvariant(), IncludeServiceFolders = includeServiceFolders };
         using var session = new ComScope();
         dynamic? outlookNamespace = null;
         dynamic? targetRoot = null;
@@ -46,10 +55,32 @@ public static class OutlookConverter
             // Read source before creating an output or starting Outlook.
             var archive = new XstFile(source);
             var root = archive.ReadFolderTree();
+            if (chosen is not null)
+            {
+                foreach (var group in chosen.Distinct().GroupBy(s => s.FolderId))
+                {
+                    var folder = group.First().ResolveFolder(root);
+                    var headers = archive.ReadMessages(folder);
+                    foreach (var selectedMessage in group) selectedMessage.ResolveMessage(headers);
+                    folder.Messages.Clear();
+                }
+            }
             var type = Type.GetTypeFromProgID("Outlook.Application")
                 ?? throw new InvalidOperationException("Не найден классический Outlook. Новый Outlook не поддерживает COM. Установите и настройте классический Outlook.");
             dynamic app = session.Keep(Activator.CreateInstance(type)!);
             outlookNamespace = session.Keep(app.GetNamespace("MAPI"));
+            var writer = new MailWriterContext((object)app, (object)outlookNamespace, format, target);
+            if (format == ExportFormat.Msg)
+            {
+                Directory.CreateDirectory(target);
+                CopyFolder(archive, root, () => new object(), report, progress, cancellation, writer, selectedIds);
+                report.OutputMessagesVerified = report.MsgFiles.Count;
+                report.OutlookReadBackVerified = report.ContentVerified == report.Converted && report.MsgFiles.Count == report.Converted;
+                report.Completed = report.FolderErrors == 0 && report.Failed == 0 && report.OutlookReadBackVerified;
+                cancellation.ThrowIfCancellationRequested();
+            }
+            else
+            {
             // 2 = olStoreUnicode. Do not Logon/Logoff or Quit the user's Outlook session.
             // Use the requested NEW pathname from the start. Outlook can retain OS handles even
             // after RemoveStore; renaming the saved PST was the fatal error in the user's report.
@@ -72,22 +103,18 @@ public static class OutlookConverter
             using (var scope = new ComScope())
             {
                 dynamic folders = scope.Keep(targetRoot.Folders);
-                dynamic importedRoot = scope.Keep(folders.Add(ExportFolderLayout.ImportFolderName, 6)); // olFolderInbox
-                if (selection is null) CopyFolder(archive, root, importedRoot, report, progress, cancellation);
-                else
-                {
-                    var selectedFolder = selection.ResolveFolder(root);
-                    var selectedMessage = selection.ResolveMessage(archive.ReadMessages(selectedFolder));
-                    CopyMessages(archive, selectedFolder, (object)importedRoot, [selectedMessage], report, progress, cancellation);
-                }
-                PstInventory.Verify(report, OutlookPst.ReadFolderCounts((object)importedRoot));
+                var importedRoot = new Lazy<object>(() => (object)scope.Keep(folders.Add(ExportFolderLayout.ImportFolderName, 6)));
+                CopyFolder(archive, root, () => importedRoot.Value, report, progress, cancellation, writer, selectedIds);
+                PstInventory.Verify(report, importedRoot.IsValueCreated ? OutlookPst.ReadFolderCounts(importedRoot.Value) : []);
             }
             cancellation.ThrowIfCancellationRequested();
-            report.Completed = report.FolderErrors == 0;
+            report.Completed = report.FolderErrors == 0 && report.Failed == 0;
+            }
         }
-        catch (OperationCanceledException) { report.Cancelled = true; }
+        catch (OperationCanceledException) { report.Cancelled = true; report.Completed = false; }
         catch (Exception e)
         {
+            report.Completed = false;
             report.FatalError = e.Message;
             report.Issues.Add(new("", "", e.Message, "Fatal", e.ToString()));
         }
@@ -106,7 +133,13 @@ public static class OutlookConverter
             session.Dispose();
         }
 
-        OutputFileStatus.Apply(report, target, detached);
+        if (report.Converted == 0)
+        {
+            report.Completed = false;
+            report.FatalError ??= "Ни одно письмо не сохранено. Проверьте причины пропуска и ошибок в отчёте.";
+        }
+        if (format == ExportFormat.Pst) OutputFileStatus.Apply(report, target, detached);
+        else if (!report.Completed && Directory.Exists(target)) report.RetainedPartialDirectory = target;
         report.FinishedUtc = DateTime.UtcNow;
         // Never overwrite an existing report. A cancelled/failed conversion also gets a report.
         using (var stream = new FileStream(reportPath, FileMode.CreateNew, FileAccess.Write))
@@ -115,43 +148,50 @@ public static class OutlookConverter
         return new ConversionResult(report, reportPath);
     }
 
-    private static void CopyFolder(XstFile archive, Folder source, dynamic destination,
+    private static void CopyFolder(XstFile archive, Folder source, Func<object> destination,
         ConversionReport report, IProgress<ConversionProgress> progress, CancellationToken cancellation,
+        MailWriterContext writer, Dictionary<uint, HashSet<uint>>? selectedIds,
         int depth = 0, HashSet<string>? destinationNames = null)
     {
         destinationNames ??= new(StringComparer.OrdinalIgnoreCase);
         cancellation.ThrowIfCancellationRequested();
-        var messages = FolderReadPolicy.Read(archive, source, report);
-        CopyMessages(archive, source, (object)destination, messages, report, progress, cancellation);
+        var messages = selectedIds is null || selectedIds.ContainsKey(source.Nid.dwValue) ? FolderReadPolicy.Read(archive, source, report) : [];
+        if (selectedIds is not null && selectedIds.TryGetValue(source.Nid.dwValue, out var ids)) messages = messages.Where(m => ids.Contains(m.Nid.dwValue)).ToList();
+        CopyMessages(archive, source, destination, messages, report, progress, cancellation, writer);
         // Release cached headers as well: do not retain the whole mailbox in RAM during conversion.
         source.Messages.Clear();
         foreach (var child in source.Folders)
         {
             cancellation.ThrowIfCancellationRequested();
-            if (ExportFolderLayout.IsWrapper(child, depth))
+            if (selectedIds is null && !report.IncludeServiceFolders && ExportFolderLayout.IsServiceBranch(child, depth))
             {
-                CopyFolder(archive, child, destination, report, progress, cancellation, depth + 1, destinationNames);
+                report.ExcludedServiceFolders.Add(child.Path);
+                continue;
+            }
+            if (writer.Format == ExportFormat.Msg || ExportFolderLayout.IsWrapper(child, depth))
+            {
+                CopyFolder(archive, child, destination, report, progress, cancellation, writer, selectedIds, depth + 1, destinationNames);
                 continue;
             }
             using var scope = new ComScope();
-            dynamic childFolder;
-            try
+            var childFolder = new Lazy<object>(() =>
             {
-                dynamic folders = scope.Keep(destination.Folders);
-                childFolder = scope.Keep(folders.Add(ExportFolderLayout.UniqueName(child.Name, destinationNames), 6));
-            }
+                dynamic parent = destination();
+                dynamic folders = scope.Keep(parent.Folders);
+                return (object)scope.Keep(folders.Add(ExportFolderLayout.UniqueName(child.Name, destinationNames), 6));
+            });
+            try { CopyFolder(archive, child, () => childFolder.Value, report, progress, cancellation, writer, selectedIds, depth + 1); }
             catch (COMException error)
             {
                 report.FolderErrors++;
                 report.Issues.Add(new(child.Path, "", "Outlook не создал папку: " + error.Message, "CreateFolder", error.ToString()));
                 continue;
             }
-            CopyFolder(archive, child, childFolder, report, progress, cancellation, depth + 1);
         }
     }
 
-    private static void CopyMessages(XstFile archive, Folder source, object target, List<Message> messages,
-        ConversionReport report, IProgress<ConversionProgress> progress, CancellationToken cancellation)
+    private static void CopyMessages(XstFile archive, Folder source, Func<object> target, List<Message> messages,
+        ConversionReport report, IProgress<ConversionProgress> progress, CancellationToken cancellation, MailWriterContext writer)
     {
         foreach (var message in messages)
         {
@@ -173,13 +213,16 @@ public static class OutlookConverter
                 stage = "PrepareBody";
                 var body = PreparedBody.FromMessage(message);
                 stage = "WriteMessage";
-                WriteMessage(archive, message, target, body, (field, error) =>
+                var msgPath = writer.Format == ExportFormat.Msg ? Path.Combine(writer.Target, ArchiveUtilities.MsgFileName(message.Subject, source.Nid.dwValue, message.Nid.dwValue)) : null;
+                WriteMessage(archive, message, writer.Format == ExportFormat.Pst ? target() : null, body, writer, msgPath, (field, error) =>
                 {
                     report.MetadataWarnings++;
                     report.Issues.Add(new(source.Path, message.Subject ?? "",
                         "Outlook не сохранил поле " + field + ": " + error.Message, "Metadata", error.ToString()));
                 });
                 report.Converted++;
+                report.ContentVerified++;
+                if (msgPath is not null) report.MsgFiles.Add(msgPath);
                 if (body.ConvertedFromRtf) report.RtfBodiesConvertedToHtml++;
             }
             catch (UnsupportedMessageException e)
@@ -190,39 +233,53 @@ public static class OutlookConverter
             catch (Exception e)
             {
                 report.Failed++;
-                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, stage, e.ToString()));
+                report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, e is SavedMailVerificationException ? "VerifySavedMessage" : stage, e.ToString()));
             }
             finally { message.ClearContents(); message.Properties.Clear(); message.Recipients.Clear(); }
             progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, source.Path));
         }
     }
 
-    private static void WriteMessage(XstFile archive, Message message, object target, PreparedBody body, Action<string, Exception> metadataWarning)
+    private sealed record MailWriterContext(object App, object Session, ExportFormat Format, string Target);
+
+    private static void WriteMessage(XstFile archive, Message message, object? target, PreparedBody body, MailWriterContext writer, string? msgPath, Action<string, Exception> metadataWarning)
     {
-        dynamic folder = target;
+        dynamic? folder = target;
         var temp = Path.Combine(Path.GetTempPath(), "MailArchive-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         using var scope = new ComScope();
         dynamic? item = null;
+        dynamic? reopened = null;
         bool saved = false;
         try
         {
-            dynamic items = scope.Keep(folder.Items);
-            item = scope.Keep(items.Add("IPM.Note"));
+            if (writer.Format == ExportFormat.Msg)
+            {
+                dynamic app = writer.App;
+                item = scope.Keep(app.CreateItem(0)); // transient MailItem; never Save to the user's Drafts
+            }
+            else
+            {
+                dynamic items = scope.Keep(folder!.Items);
+                item = scope.Keep(items.Add("IPM.Note"));
+            }
             item.Subject = message.Subject ?? "";
             body.WriteTo(format => item.BodyFormat = format, html => item.HTMLBody = html);
 
             dynamic recipients = scope.Keep(item.Recipients);
+            int expectedRecipients = 0;
             foreach (var recipient in message.Recipients.Where(r => (int)r.RecipientType is >= 1 and <= 3))
             {
                 var address = recipient.EmailAddress ?? recipient.DisplayName;
                 if (string.IsNullOrWhiteSpace(address)) continue;
                 dynamic entry = scope.Keep(recipients.Add(address));
                 entry.Type = (int)recipient.RecipientType;
+                expectedRecipients++;
                 // No ResolveAll: Exchange may be unavailable; original address remains in the recipient row.
             }
             dynamic attachments = scope.Keep(item.Attachments);
             int number = 0;
+            var expectedHashes = new List<string>();
             foreach (var attachment in message.Attachments)
             {
                 // Unique private directory per attachment prevents duplicate names and path traversal.
@@ -230,6 +287,7 @@ public static class OutlookConverter
                 Directory.CreateDirectory(directory);
                 var path = Path.Combine(directory, ArchiveUtilities.SafeAttachmentName(attachment.FileName));
                 archive.SaveAttachment(path, null, attachment);
+                using (var input = File.OpenRead(path)) expectedHashes.Add(System.Convert.ToHexString(SHA256.HashData(input)));
                 dynamic added = scope.Keep(attachments.Add(path, 1, Type.Missing, attachment.FileName ?? "attachment"));
                 if (!string.IsNullOrEmpty(attachment.ContentId))
                 {
@@ -238,9 +296,18 @@ public static class OutlookConverter
                     attachmentProperties.SetProperty(Dasl(0x7FFE000B), attachment.Hidden);
                 }
             }
+            // Commit the ordinary Outlook properties first. Do not transplant PR_MESSAGE_FLAGS:
+            // setting MAPI lifecycle flags on a new MailItem can conflict with its pending OOM state.
+            if (msgPath is null) item.Save();
+            else
+            {
+                using (new FileStream(msgPath, FileMode.CreateNew, FileAccess.Write)) { }
+                item.SaveAs(msgPath, 9); // olMSGUnicode: one file per selected message
+            }
+            saved = true;
             dynamic properties = scope.Keep(item.PropertyAccessor);
             // Whitelist only common mail metadata. Never copy store-specific entry IDs or arbitrary properties.
-            foreach (ushort tag in new ushort[] { 0x0C1A, 0x0C1E, 0x0C1F, 0x0042, 0x0064, 0x0065, 0x1035, 0x007D })
+            foreach (ushort tag in new ushort[] { 0x0C1A, 0x0C1E, 0x0C1F, 0x0042, 0x0064, 0x0065, 0x1035 })
             {
                 var value = ConvertString(message, tag);
                 if (!string.IsNullOrEmpty(value))
@@ -253,17 +320,40 @@ public static class OutlookConverter
             var originalFlags = message.Properties.FirstOrDefault(p => (ushort)p.Tag == 0x0E07)?.Value;
             int flags = originalFlags is null ? 1 : System.Convert.ToInt32(originalFlags);
             MetadataCopy.TrySet("UnRead", () => item.UnRead = (flags & 1) == 0, metadataWarning);
-            // Set before first Save: preserve read/unsent state without transplanting attachment/store flags.
-            MetadataCopy.TrySet("MessageFlags", () => properties.SetProperty(Dasl(0x0E070003), flags & 0x00000009), metadataWarning);
-            item.Save();
-            saved = true;
+            // Reassert the ordinary core fields after optional MAPI setters, so Outlook's
+            // pending subject/body state is what the final Save/SaveAs commits.
+            item.Subject = message.Subject ?? "";
+            body.WriteTo(format => item.BodyFormat = format, html => item.HTMLBody = html);
+            dynamic mapinamespace = writer.Session;
+            if (msgPath is null)
+            {
+                item.Save();
+                var entryId = (string)item.EntryID;
+                if (string.IsNullOrEmpty(entryId)) throw new SavedMailVerificationException("Outlook не присвоил сохранённому письму EntryID.");
+                reopened = scope.Keep(mapinamespace.GetItemFromID(entryId, (string)folder!.StoreID));
+            }
+            else { item.SaveAs(msgPath, 9); reopened = scope.Keep(mapinamespace.OpenSharedItem(msgPath)); }
+            dynamic savedAttachments = scope.Keep(reopened.Attachments);
+            var actualHashes = new List<string>();
+            for (int index = 1; index <= (int)savedAttachments.Count; index++)
+            {
+                dynamic attachment = scope.Keep(savedAttachments[index]);
+                var verifyPath = Path.Combine(temp, "verify-" + index + ".bin");
+                attachment.SaveAsFile(verifyPath);
+                using var input = File.OpenRead(verifyPath);
+                actualHashes.Add(System.Convert.ToHexString(SHA256.HashData(input)));
+            }
+            dynamic savedRecipients = scope.Keep(reopened.Recipients);
+            var expected = new SavedMailContent(message.Subject ?? "", body.Html, body.Text, expectedRecipients, expectedHashes);
+            expected.Verify(new((string?)reopened.Subject ?? "", (string?)reopened.HTMLBody ?? "", (string?)reopened.Body ?? "", (int)savedRecipients.Count, actualHashes));
         }
         finally
         {
-            if (!saved && item is not null)
+            if ((!saved || msgPath is not null) && item is not null)
             {
                 try { item.Close(1); } catch { /* Best effort discard of unsaved item. */ }
             }
+            if (msgPath is not null && reopened is not null) { try { reopened.Close(1); } catch { } }
             scope.Dispose();
             try { Directory.Delete(temp, recursive: true); } catch { /* No source files are ever removed. */ }
         }

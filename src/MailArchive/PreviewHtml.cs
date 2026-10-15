@@ -8,7 +8,7 @@ public static class PreviewHtml
     private const int MaxImageBytes = 8 * 1024 * 1024;
     public const string ContentSecurityPolicy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'";
 
-    public static string Create(string html, Func<string, byte[]?>? loadCid = null)
+    public static string Create(string html, Func<string, byte[]?>? loadCid = null, bool dark = false)
     {
         var document = new HtmlParser().ParseDocument(html);
         foreach (var element in document.QuerySelectorAll("script,iframe,frame,frameset,object,embed,applet,link,meta,base,form,input,button,textarea,select,video,audio,source,track,svg,math").ToArray())
@@ -50,7 +50,12 @@ public static class PreviewHtml
         var csp = document.CreateElement("meta"); csp.SetAttribute("http-equiv", "Content-Security-Policy");
         csp.SetAttribute("content", ContentSecurityPolicy); head.Prepend(csp);
         var style = document.CreateElement("style");
-        style.TextContent = "html{color-scheme:light}body{margin:18px;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.45;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre{white-space:pre-wrap}table{max-width:100%}";
+        var background = dark ? "#232d40" : "#ffffff";
+        var ink = dark ? "#f0f4fc" : "#18243a";
+        var track = dark ? "#34425c" : "#d6deed";
+        var thumb = dark ? "#a2b5d8" : "#637ba6";
+        style.TextContent = $"html{{color-scheme:{(dark ? "dark" : "light")};background:{background}}}body{{margin:18px;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.5;overflow-wrap:anywhere;background:{background};color:{ink}}}img{{max-width:100%;height:auto}}pre{{white-space:pre-wrap}}table{{max-width:100%}}"
+            + $"::-webkit-scrollbar{{width:16px;height:16px}}::-webkit-scrollbar-track{{background:{track};border-radius:8px}}::-webkit-scrollbar-thumb{{background:{thumb};border:3px solid {track};border-radius:8px}}";
         head.AppendChild(style);
         return "<!doctype html>\n" + document.DocumentElement!.OuterHtml;
     }

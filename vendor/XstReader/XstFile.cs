@@ -35,6 +35,7 @@ namespace XstReader
         {
             {EpropertyTag.PidTagDisplayName, (f, val) => f.Name = val },
             {EpropertyTag.PidTagContentCount, (f, val) => f.ContentCount = val },
+            {EpropertyTag.PidTagContainerClass, (f, val) => f.ContainerClass = val },
             // Don't bother reading HasSubFolders, because it is not always set
             // {EpropertyTag.PidTagSubfolders, (f, val) => f.HasSubFolders = val },
         };

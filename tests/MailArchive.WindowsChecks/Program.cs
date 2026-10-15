@@ -61,3 +61,26 @@ var single = await OutlookConverter.ConvertAsync(Path.GetFullPath(args[0]), Path
 if (!single.Report.Completed || single.Report.Examined != 1 || single.Report.Converted != 1 || single.Report.Failed != 0)
     throw new Exception("Single-message Outlook conversion failed: " + single.ReportPath);
 Console.WriteLine("PASS: selected-message conversion examines and saves exactly one message.");
+var allSelected = new List<MessageSelection>();
+foreach (var folder in Walk(sourceRoot))
+{
+    foreach (var candidate in sourceArchive.ReadMessages(folder))
+    {
+        sourceArchive.ReadMessageDetails(candidate);
+        if (candidate.Properties.Any(p => (ushort)p.Tag == 0x001A && (string?)p.Value == "IPM.Note")) allSelected.Add(MessageSelection.FromMessage(candidate));
+        candidate.ClearContents();
+    }
+}
+var batch = allSelected.Take(2).ToArray();
+if (batch.Length != 2) throw new Exception("Fixture lacks two messages for batch conversion.");
+var msgs = await OutlookConverter.ConvertAsync(Path.GetFullPath(args[0]), Path.GetFullPath(args[1]) + ".msg-files",
+    new Progress<ConversionProgress>(), CancellationToken.None, selections: batch, format: ExportFormat.Msg);
+if (!msgs.Report.Completed || msgs.Report.Converted != 2 || msgs.Report.ContentVerified != 2 || msgs.Report.MsgFiles.Count != 2)
+    throw new Exception("Batch MSG conversion failed: " + msgs.ReportPath);
+foreach (var output in msgs.Report.MsgFiles)
+{
+    using var stream = File.OpenRead(output);
+    var magic = new byte[8]; stream.ReadExactly(magic);
+    if (!magic.SequenceEqual(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 })) throw new Exception("MSG is not a compound document.");
+}
+Console.WriteLine("PASS: two selected messages become two Unicode MSG files with verified content.");

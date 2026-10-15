@@ -4,6 +4,14 @@ using System.Text.RegularExpressions;
 namespace MailArchive;
 public static class ArchiveUtilities
 {
+    public static string MsgFileName(string? subject, uint folderId, uint messageId) =>
+        SafeAttachmentName(string.IsNullOrWhiteSpace(subject) ? "Без темы" : subject) + $"-{folderId:X8}-{messageId:X8}.msg";
+
+    public static void ValidateMsgDestination(string destination)
+    {
+        if (Directory.Exists(destination) || File.Exists(destination)) throw new IOException("Выберите новую папку для MSG. Существующие файлы не перезаписываются.");
+        if (!Directory.Exists(Path.GetDirectoryName(Path.GetFullPath(destination)))) throw new DirectoryNotFoundException("Родительская папка MSG не существует.");
+    }
     // Never display email HTML in a browser: no script execution, trackers or navigation.
     public static string HtmlToText(string? html)
     {
