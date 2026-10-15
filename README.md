@@ -1,4 +1,4 @@
-# Mail Archive 1.2.0 — OST/PST
+# Mail Archive 1.2.1 — OST/PST
 
 Бесплатный просмотрщик OST/PST для Windows 10/11 и перенос писем в PST через **классический Outlook**.
 Новый Outlook COM-автоматизацию не поддерживает. Просмотр файлов не требует Outlook.

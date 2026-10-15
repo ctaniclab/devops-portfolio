@@ -31,8 +31,24 @@ public partial class App : Application
                 var chrome = (Border)open.Template.FindName("Chrome", open);
                 if (art.Source is not BitmapSource bitmap || bitmap.PixelWidth < 256 || chrome.CornerRadius.TopLeft < 8)
                     throw new InvalidDataException("Application illustration/rounded UI was not loaded.");
-                var screenshot = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
-                screenshot.Render(window);
+                var surface = (FrameworkElement)window.Content;
+                var pane = (Border)window.FindName("MessagePane");
+                var save = (Button)window.FindName("SaveAttachmentButton");
+                var tabs = (TabControl)window.FindName("BodyTabs");
+                var saveBounds = save.TransformToAncestor(pane).TransformBounds(new Rect(save.RenderSize));
+                if (saveBounds.Bottom > pane.ActualHeight || tabs.ActualHeight < 70)
+                    throw new InvalidDataException("The message/attachment controls are clipped at the current window size.");
+                // Capture client content, excluding the native frame that WPF cannot render.
+                var margin = surface.Margin;
+                var bounds = new Rect(0, 0, surface.ActualWidth + margin.Left + margin.Right, surface.ActualHeight + margin.Top + margin.Bottom);
+                var visual = new DrawingVisual();
+                using (var drawing = visual.RenderOpen())
+                {
+                    drawing.DrawRectangle(window.Background, null, bounds);
+                    drawing.DrawRectangle(new VisualBrush(surface), null, new Rect(margin.Left, margin.Top, surface.ActualWidth, surface.ActualHeight));
+                }
+                var screenshot = new RenderTargetBitmap((int)Math.Ceiling(bounds.Width), (int)Math.Ceiling(bounds.Height), 96, 96, PixelFormats.Pbgra32);
+                screenshot.Render(visual);
                 var encoder = new PngBitmapEncoder();
                 encoder.Frames.Add(BitmapFrame.Create(screenshot));
                 using (var file = File.Create(output + ".png")) encoder.Save(file);
@@ -46,7 +62,7 @@ public partial class App : Application
             catch (Exception failure) { error = failure.ToString(); }
             finally
             {
-                try { File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.2.0", HtmlRenderingVerified = exitCode == 0, MainWindowVerified = mainWindowVerified, Error = error })); }
+                try { File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.2.1", HtmlRenderingVerified = exitCode == 0, MainWindowVerified = mainWindowVerified, Error = error })); }
                 catch { exitCode = 1; }
                 window?.Close();
                 Shutdown(exitCode);
