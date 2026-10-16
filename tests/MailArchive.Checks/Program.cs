@@ -24,7 +24,35 @@ ContentChecks.Run(Check);
 TransferChecks.Run(Check);
 ThemeChecks.Run(Check);
 TimingChecks.Run(Check);
+DateMetadataChecks.Run(Check);
+StandaloneMsgChecks.Run(Check);
 FolderLayoutChecks.Run(Check);
+var journalPath = Path.Combine(Path.GetTempPath(), "mailarchive-journal-" + Guid.NewGuid() + ".jsonl");
+try
+{
+    using (var journal = new ConversionJournal(journalPath))
+    {
+        journal.Append(new { Event = "MessageStarted", MessageId = 42 });
+        using (var reader = new StreamReader(new FileStream(journalPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
+            Check(reader.ReadLine() is not null && reader.ReadLine() is null, "Journal is readable before conversion finishes");
+        journal.Append(new { Event = "MessageFinished", MessageId = 42, Outcome = "Converted" });
+        journal.Append(new { Event = "MessageStarted", MessageId = 43 });
+    }
+    var records = File.ReadAllLines(journalPath).Select(line => System.Text.Json.JsonDocument.Parse(line)).ToArray();
+    Check(records.Length == 3 && records[1].RootElement.GetProperty("Outcome").GetString() == "Converted"
+        && records[2].RootElement.GetProperty("MessageId").GetInt32() == 43, "Journal preserves completed and interrupted item identities");
+    foreach (var record in records) record.Dispose();
+    Reject(() => { using var duplicate = new ConversionJournal(journalPath); }, "Journal never overwrites an existing run");
+}
+finally { File.Delete(journalPath); }
+using (var cancelledOutline = new CancellationTokenSource())
+{
+    cancelledOutline.Cancel();
+    bool cancelled = false;
+    try { ArchiveOutline.Read(null!, new XstReader.Folder(), false, cancelledOutline.Token); }
+    catch (OperationCanceledException) { cancelled = true; }
+    Check(cancelled, "Cancelled folder enumeration stops before reading the archive");
+}
 var recoveryReport = new ConversionReport();
 var unreadable = FolderReadPolicy.Read(() => throw new IndexOutOfRangeException("bad table"),
     () => [], "Входящие", recoveryReport);
@@ -122,6 +150,18 @@ foreach (var path in args)
                 rtfBodies++;
             }
             if (body.Contains("This is an e-mail message sent automatically by Microsoft Outlook while testing the settings for your account.")) knownBody = true;
+            if (message.Properties.Any(p => (ushort)p.Tag == 0x001A && (string?)p.Value == "IPM.Note") && message.Attachments.All(a => a.IsFile))
+            {
+                string msg = Path.Combine(Path.GetTempPath(), "MailArchive-fixture-" + Guid.NewGuid().ToString("N") + ".msg");
+                try
+                {
+                    var expected = StandaloneMsg.Write(msg, message, PreparedBody.FromMessage(message), (p, a) => file.SaveAttachment(p, null, a));
+                    StandaloneMsg.Verify(msg, expected, new(message.Received, message.Submitted));
+                    StandaloneMsgChecks.ExportForIndependent(msg, message, expected, Path.GetFileName(path) + "-" + messages);
+                    Check(true, $"Actual {Path.GetExtension(path)} message {messages}: direct MSG export preserves content, recipients, attachments and UTC dates");
+                }
+                finally { if (File.Exists(msg)) File.Delete(msg); }
+            }
             message.ClearContents();
         }
         foreach (var child in folder.Folders) Visit(child);

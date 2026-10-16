@@ -36,10 +36,12 @@ public static class TransferChecks
         }
         var sessionFailure = new FakeSession { FailRead = true };
         string failedStage = ""; bool failed = false;
-        try { OutlookMessageTransfer.MoveAndReopen(new FakeMail(new("pst-store", "inbox"), "old"), new FakeFolder("pst-store", "inbox"), sessionFailure, x => x, s => failedStage = s); }
+        object? movedBeforeFailure = null;
+        try { OutlookMessageTransfer.MoveAndReopen(new FakeMail(new("pst-store", "inbox"), "old"), new FakeFolder("pst-store", "inbox"), sessionFailure, x => x, s => failedStage = s, value => movedBeforeFailure = value); }
         catch (COMException e) when (e.HResult == unchecked((int)0x80040107)) { failed = true; }
         check(failed && failedStage == "ReopenPstMessage" && sessionFailure.Reads == 1,
             "PST read-back errors retain the precise stage and never fall back to another store");
+        check(movedBeforeFailure is FakeMail { EntryID: "new-pst-id" }, "Exact moved item remains available for isolation when reopening fails");
         var empty = new ConversionReport(); PstInventory.Verify(empty, []);
         check(!empty.OutlookReadBackVerified, "Zero converted letters cannot produce a verified PST report");
         var orphan = new ConversionReport(); bool orphanRejected = false;

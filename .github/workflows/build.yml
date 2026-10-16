@@ -22,7 +22,28 @@ jobs:
         run: ./tests/Get-Fixtures.ps1
       - name: Check archive reading and file protection
         shell: pwsh
-        run: dotnet run --project tests/MailArchive.Checks -c Release -- tests/fixtures/example-2013.ost tests/fixtures/dist-list.pst
+        env:
+          MAILARCHIVE_MSG_CHECK_OUTPUT: ${{ runner.temp }}/mailarchive-independent-msg
+        run: |
+          dotnet run --project tests/MailArchive.Checks -c Release -- tests/fixtures/example-2013.ost tests/fixtures/dist-list.pst 2>&1 | Tee-Object -FilePath checks.log
+          $checkExit = $LASTEXITCODE
+          if ($checkExit -ne 0) {
+            '### Portable check failure' | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            '```text' | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Get-Content checks.log -Tail 60 | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            '```' | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            exit $checkExit
+          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify exported MSG with an independent reader
+        shell: pwsh
+        run: |
+          python -m pip install extract-msg==0.55.0
+          if ($LASTEXITCODE -ne 0) { throw 'Independent MSG reader install failed.' }
+          python tests/Verify-Msg.py (Join-Path $env:RUNNER_TEMP 'mailarchive-independent-msg')
+          if ($LASTEXITCODE -ne 0) { throw 'Independent MSG verification failed.' }
       - name: Build Outlook integration check
         run: dotnet build tests/MailArchive.WindowsChecks -c Release
       # Hosted runners do not have a configured Outlook profile; do not run Outlook conversion here.
@@ -45,7 +66,8 @@ jobs:
             throw 'Published EXE self-check failed.'
           }
           $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified -or -not $result.ReaderWindowVerified -or -not $result.ThemedScrollBarsVerified -or -not $result.ExportWizardVerified -or -not $result.AllThemesVerified -or -not $result.NativeCaptionApiAccepted -or -not $result.NativeDarkModeVerified -or -not $result.GlassFallbackVerified -or -not $result.ConversionProgressUiVerified) { throw 'Email HTML rendering or application UI was not verified.' }
+          if (-not $result.GlassPanelsVerified -or -not $result.DisabledTreeVerified -or -not $result.TabBoundsVerified -or -not $result.OfflineMsgExportVerified) { throw 'Glass panels, disabled tree, tab clipping or offline MSG export check failed.' }
+          if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified -or -not $result.ReaderWindowVerified -or -not $result.ThemedScrollBarsVerified -or -not $result.ExportWizardVerified -or -not $result.AllThemesVerified -or -not $result.NativeCaptionApiAccepted -or -not $result.NativeDarkModeVerified -or -not $result.GlassFallbackVerified -or -not $result.ConversionProgressUiVerified -or -not $result.ExecutableIconVerified) { throw 'Email HTML rendering or application UI was not verified.' }
           Copy-Item $report dist/preview-report.json
           Copy-Item "$report.png" dist/ui-preview.png
           Copy-Item "$report.dark.png" dist/ui-dark.png
@@ -60,14 +82,14 @@ jobs:
       - name: Prepare release assets
         shell: pwsh
         run: |
-          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.5.0.exe
-          (Get-FileHash dist/MailArchive-1.5.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.5.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.5.0.exe.sha256
+          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.6.1.exe
+          (Get-FileHash dist/MailArchive-1.6.1.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.6.1.exe' | Set-Content -Encoding ascii dist/MailArchive-1.6.1.exe.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: MailArchive-1.5.0-verified
+          name: MailArchive-1.6.1-verified
           path: |
-            dist/MailArchive-1.5.0.exe
-            dist/MailArchive-1.5.0.exe.sha256
+            dist/MailArchive-1.6.1.exe
+            dist/MailArchive-1.6.1.exe.sha256
             dist/MailArchive-win-x64.zip
             dist/defender-report.json
             dist/defender-report.json.txt
@@ -133,7 +155,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: MailArchive-1.5.0-verified
+          name: MailArchive-1.6.1-verified
           path: release
       - name: Publish only after tests, preview and Defender passed
         env:
@@ -141,8 +163,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          if gh release view v1.5.0 >/dev/null 2>&1; then
-            echo 'Version v1.5.0 already exists; existing assets will not be overwritten.'
+          if gh release view v1.6.1 >/dev/null 2>&1; then
+            echo 'Version v1.6.1 already exists; existing assets will not be overwritten.'
             exit 0
           fi
-          gh release create v1.5.0 --target '${{ github.sha }}' --title 'Mail Archive 1.5.0' --notes 'Distinct paper, classic, liquid glass, transparent, space, ocean, aurora, neon and terminal themes with native Windows 11 Desktop Acrylic and readable opaque fallback. Conversion percentage, elapsed time and adaptive ETA. MSG exports preserve original mailbox folders and subfolders under a source-named directory; PST folders sit directly under the archive name. Native window captions follow the selected theme. PST import now uses verified standalone MSG plus explicit Move and fresh destination EntryID; reports include precise stages and HRESULTs. Classic, glass, space and ocean visual themes with contrast checks. Multiple-message selection and PST/Unicode MSG format wizard, separate reading window, light/dark themes, sRGB software rendering compatibility, rounded scrollbars, removal of empty export folders, and content-level Outlook read-back verification. Real HDR monitor behavior and Outlook automation are not validated on hosted CI. Includes Microsoft Defender and published-preview verification reports. Outlook automation against a personal mailbox still requires validation on the target machine.' release/*
+          gh release create v1.6.1 --target '${{ github.sha }}' --title 'Mail Archive 1.6.1' --notes 'Adds a durable per-message conversion journal, recipient address/role and sender verification, and isolation of newly moved PST items that fail validation. Selection loading can be cancelled; full folder paths distinguish similarly named folders. Search waits for a short typing pause. Tab spacing no longer clips rounded right edges and Windows UI checks now check horizontal bounds. Includes 165 portable checks, six independently verified MSG fixtures, Windows EXE UI/MSG checks and Defender scan. PST automation on a real Outlook profile and HDR hardware remain untested on hosted CI. Automatic resume is not supported; existing account messages are never deleted.' release/*

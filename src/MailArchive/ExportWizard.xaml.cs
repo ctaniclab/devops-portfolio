@@ -27,6 +27,8 @@ public partial class ExportWizard : Window
     private bool batch;
     private bool countPending;
     private bool formatStep;
+    private readonly CancellationTokenSource loadCancellation = new();
+    private int searchRevision;
     public IReadOnlyList<MessageSelection> Selected { get; private set; } = [];
     public ExportFormat Format { get; private set; }
     public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -43,28 +45,32 @@ public partial class ExportWizard : Window
             choices = await Task.Run(() =>
             {
                 var archive = new XstFile(source);
-                var outline = ArchiveOutline.Read(archive, archive.ReadFolderTree(), includeService);
+                var outline = ArchiveOutline.Read(archive, archive.ReadFolderTree(), includeService, loadCancellation.Token);
                 IEnumerable<ArchiveFolder> Walk(ArchiveFolder node)
                 { yield return node; foreach (var child in node.Children) foreach (var descendant in Walk(child)) yield return descendant; }
                 var list = new List<MessageChoice>();
                 foreach (var node in outline.Folders.SelectMany(Walk))
                 {
+                    loadCancellation.Token.ThrowIfCancellationRequested();
                     foreach (var message in archive.ReadMessages(node.Source))
                     {
+                        loadCancellation.Token.ThrowIfCancellationRequested();
                         var id = MessageSelection.FromMessage(message);
                         list.Add(new() { Id = id, Subject = string.IsNullOrWhiteSpace(message.Subject) ? "Без темы" : message.Subject,
-                            Sender = message.From ?? "", Folder = node.Source.Name, Chosen = preselected is not null && preselected == id });
+                            Sender = message.From ?? "", Folder = node.Source.Path, Chosen = preselected is not null && preselected == id });
                     }
                     node.Source.Messages.Clear();
                 }
                 if (outline.Warnings.Count > 0) throw new IOException("Не все папки удалось прочитать. Проверьте журнал чтения архива перед выборочной конвертацией.");
                 return list;
             });
+            loadCancellation.Token.ThrowIfCancellationRequested();
             foreach (var choice in choices) choice.PropertyChanged += Choice_Changed;
             MessageChoices.ItemsSource = choices; AllButton.IsEnabled = NoneButton.IsEnabled = FoundButton.IsEnabled = true;
             StepHint.Text = "Отметьте нужные письма галочками или нажмите «Выбрать все». Затем выберите PST или MSG.";
             UpdateCount(); Ready.TrySetResult();
         }
+        catch (OperationCanceledException) { Ready.TrySetCanceled(); }
         catch (Exception error) { StepHint.Text = "Не удалось подготовить список: " + error.Message; Ready.TrySetException(error); }
         finally { loading = false; }
     }
@@ -81,8 +87,11 @@ public partial class ExportWizard : Window
     private void All_Click(object sender, RoutedEventArgs e) => SetChoices(choices, true);
     private void None_Click(object sender, RoutedEventArgs e) => SetChoices(choices, false);
     private void Found_Click(object sender, RoutedEventArgs e) => SetChoices(MessageChoices.Items.Cast<MessageChoice>(), true);
-    private void Search_Changed(object sender, TextChangedEventArgs e)
+    private async void Search_Changed(object sender, TextChangedEventArgs e)
     {
+        int revision = ++searchRevision;
+        await Task.Delay(300);
+        if (revision != searchRevision || loadCancellation.IsCancellationRequested) return;
         if (MessageChoices?.ItemsSource is null) return;
         var query = MessageSearch.Text.Trim();
         CollectionViewSource.GetDefaultView(MessageChoices.ItemsSource).Filter = item => item is MessageChoice choice
@@ -107,6 +116,6 @@ public partial class ExportWizard : Window
         StepTitle.Text = "1. Какие сообщения конвертировать?"; StepHint.Text = "Выбор сохранён. Можно отметить другие сообщения или выбрать все.";
         BackButton.Visibility = Visibility.Collapsed; NextButton.Content = "Далее: выбрать формат";
     }
-    private void Cancel_Click(object sender, RoutedEventArgs e) { if (!loading) DialogResult = false; }
-    private void Wizard_Closing(object? sender, CancelEventArgs e) { if (loading) e.Cancel = true; }
+    private void Cancel_Click(object sender, RoutedEventArgs e) { loadCancellation.Cancel(); DialogResult = false; }
+    private void Wizard_Closing(object? sender, CancelEventArgs e) { loadCancellation.Cancel(); searchRevision++; }
 }

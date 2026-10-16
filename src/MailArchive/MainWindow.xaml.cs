@@ -72,6 +72,7 @@ public partial class MainWindow : Window
         GlassEffects.Visibility = palette.NativeGlass ? Visibility.Visible : Visibility.Collapsed;
         ThemeHint.Text = palette.NativeGlass ? effect.Message : palette.Description;
     }
+    private void About_Click(object sender, RoutedEventArgs e) => LicenseInfo.Show(this);
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog { Filter = "Архивы Outlook (*.ost;*.pst)|*.ost;*.pst", CheckFileExists = true };
@@ -173,7 +174,13 @@ public partial class MainWindow : Window
         if (reader.LastDiagnosticPath is not null) SetReport(reader.LastDiagnosticPath);
         if (reader.ExportRequested) await BeginConversionAsync(true);
     }
-    private void Search_Changed(object sender, TextChangedEventArgs e) => ApplyFilter();
+    private int searchRevision;
+    private async void Search_Changed(object sender, TextChangedEventArgs e)
+    {
+        int revision = ++searchRevision;
+        await Task.Delay(300);
+        if (revision == searchRevision && IsLoaded) ApplyFilter();
+    }
     private void ApplyFilter()
     {
         if (Messages?.ItemsSource is null) return;
@@ -212,7 +219,7 @@ public partial class MainWindow : Window
             target = ArchiveUtilities.NewMsgRoot(dialog.FolderName, sourcePath);
         }
         ModeTabs.SelectedIndex = 1;
-        conversion = new CancellationTokenSource(); SetBusy(true, "Outlook сохраняет выбранные письма…"); CancelButton.IsEnabled = true;
+        conversion = new CancellationTokenSource(); SetBusy(true, wizard.Format == ExportFormat.Msg ? "Сохраняются выбранные MSG…" : "Outlook сохраняет выбранные письма в PST. Не закрывайте Outlook до завершения."); CancelButton.IsEnabled = true;
         conversionEstimate = new(); conversionWatch.Restart();
         lastConversionProgress = new(0, 0, 0, 0, "", wizard.Selected.Distinct().Count());
         conversionTicker.Start(); UpdateConversionTiming();
@@ -237,6 +244,8 @@ public partial class MainWindow : Window
                 + (report.Skipped > 0 ? "Пропущено элементов: " + report.Skipped + ".\n" + PstInventory.SkipSummary(report) + "\n" : "")
                 + (report.ExcludedServiceFolders.Count > 0 ? $"Служебных веток исключено: {report.ExcludedServiceFolders.Count}. Их можно включить в дополнительных параметрах.\n" : "")
                 + (report.MetadataWarnings > 0 ? $"Предупреждений о необязательных полях: {report.MetadataWarnings} (подробности в отчёте).\n" : "")
+                + (report.DatesVerified > 0 ? $"Исходные даты проверены: {report.DatesVerified}.\n" : "")
+                + (report.MessagesWithoutSourceDates > 0 ? $"Без исходной даты: {report.MessagesWithoutSourceDates}. Дату нельзя восстановить из отсутствующих данных.\n" : "")
                 + "Результат: " + report.Destination + "\n"
                 + (report.FatalError is null ? "" : "\n" + report.FatalError);
             Status.Text = (report.Completed ? "100 % · " : "") + heading + " · Прошло " + ConversionEstimateValue.Duration(conversionWatch.Elapsed) + ". " + (report.Converted > 0 ? "Откройте результат кнопкой в шаге 3." : "Проверьте причины в отчёте.");

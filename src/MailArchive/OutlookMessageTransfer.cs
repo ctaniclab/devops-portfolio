@@ -5,11 +5,12 @@ namespace MailArchive;
 public static class OutlookMessageTransfer
 {
     public static object MoveAndReopen(object sharedMessage, object destination, object outlookSession,
-        Func<object, object> keep, Action<string> stage)
+        Func<object, object> keep, Action<string> stage, Action<object>? onMoved = null)
     {
         dynamic source = sharedMessage, folder = destination, session = outlookSession;
         stage("MoveToPst");
         dynamic moved = keep(source.Move(folder)); // Move returns a NEW item, with a NEW EntryID.
+        onMoved?.Invoke((object)moved);
         stage("VerifyPstLocation");
         dynamic parent = keep(moved.Parent);
         string storeId = parent.StoreID;

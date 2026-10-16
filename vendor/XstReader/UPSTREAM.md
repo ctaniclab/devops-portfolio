@@ -14,3 +14,6 @@ row IDs and diagnostic ReadIssue records when table columns are unreadable.
 Mail Archive 1.3.0 reads the optional PidTagContainerClass folder property to distinguish
 mail/IMAP containers from contacts, calendar and configuration items in the simplified viewer.
 Unknown classes remain traversable; actual contents tables, not cached counts, determine visibility.
+
+Mail Archive 1.5 displays UTC archive message dates in the local Windows time zone in Message.DisplayDate.
+On-disk values remain unchanged and UTC is retained for conversion and verification.

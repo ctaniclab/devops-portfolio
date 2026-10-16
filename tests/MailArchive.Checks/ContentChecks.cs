@@ -18,6 +18,12 @@ internal static class ContentChecks
         check(true, "Word HTML rewriting and whitespace changes preserve all source text");
         Reject(expected, expected with { AttachmentHashes = ["hash-a", "changed"] }, "Same attachment count with changed bytes fails SHA256 verification");
         Reject(expected, expected with { Recipients = 0 }, "Lost recipients are detected on read-back");
+        var addressed = expected with { RecipientIdentities = ["1:SMTP:A@EXAMPLE.COM", "2:SMTP:B@EXAMPLE.COM"] };
+        addressed.Verify(addressed with { RecipientIdentities = ["2:SMTP:B@EXAMPLE.COM", "1:SMTP:A@EXAMPLE.COM"] });
+        check(true, "Recipient ordering does not change identity");
+        Reject(addressed, addressed with { RecipientIdentities = ["1:SMTP:OTHER@EXAMPLE.COM", "2:SMTP:B@EXAMPLE.COM"] }, "Changed address with same recipient count is rejected");
+        Reject(addressed, addressed with { RecipientIdentities = ["1:SMTP:A@EXAMPLE.COM", "3:SMTP:B@EXAMPLE.COM"] }, "Changing Cc into Bcc is rejected");
+        Reject(expected with { SenderAddress = "sender@example.com" }, expected with { SenderAddress = "other@example.com" }, "Changed sender address is rejected");
         var image = new SavedMailContent("Image", "<img src='cid:logo'>", "", 0, []);
         Reject(image, image with { Html = "<p></p>" }, "Image-only message cannot pass after losing its image");
         var subjectOnly = new SavedMailContent("Legitimate subject-only draft", "<p></p>", "", 0, []);

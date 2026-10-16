@@ -7,15 +7,21 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ApplicationIcon>Assets/app-icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MailArchive</AssemblyName>
-    <Version>1.5.0</Version>
+    <Version>1.6.1</Version>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets/archive-hero.png" />
+    <Resource Include="Assets/app-icon.ico" />
+    <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="MailArchive.Licenses.NOTICES.md" />
+    <EmbeddedResource Include="../../vendor/licenses/*" LogicalName="MailArchive.Licenses.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../vendor/XstReader/LICENSE*" LogicalName="MailArchive.Licenses.XstReader.%(Filename)%(Extension)" />
     <Compile Include="../../vendor/XstReader/*.cs" Link="XstReader/%(Filename)%(Extension)" Nullable="disable" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
     <PackageReference Include="RtfPipe" Version="2.0.7677.4303" />
+    <PackageReference Include="OpenMcdf" Version="3.3.0" />
     <PackageReference Include="AngleSharp" Version="1.8.4" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
   </ItemGroup>

@@ -48,6 +48,18 @@ public sealed class DisplaySettings
         Application.Current.Resources["HeaderFill"] = palette.NativeGlass ? ThemeArtwork.Panel(palette) : Brushes.Transparent;
         Application.Current.Resources["HeaderPadding"] = new Thickness(palette.NativeGlass ? 12 : 0);
         Application.Current.Resources["TabIdleFill"] = palette.NativeGlass ? ThemeArtwork.Brush(colors[7]) : Brushes.Transparent;
+        // Acrylic already supplies the blurred desktop and its light/dark tint.
+        // Additional opaque control layers would hide that backdrop again.
+        if (palette.NativeGlass)
+        {
+            Application.Current.Resources["Field"] = ThemeArtwork.Brush(palette.Dark ? "#24101C30" : "#30FFFFFF");
+            Application.Current.Resources["AccentSoft"] = ThemeArtwork.Brush(palette.Dark ? "#483D699B" : "#609CC8F2");
+            Application.Current.Resources["TabIdleFill"] = ThemeArtwork.Brush(palette.Dark ? "#20101C30" : "#20FFFFFF");
+            Application.Current.Resources["ScrollTrack"] = ThemeArtwork.Brush(palette.Dark ? "#302A5070" : "#30446C98");
+            Application.Current.Resources["Line"] = ThemeArtwork.Brush(palette.Dark ? "#889CC9EE" : "#B0FFFFFF");
+        }
+        // Popups have their own HWND and must not depend on the main window backdrop.
+        Application.Current.Resources["PopupFill"] = ThemeArtwork.Brush(palette.Dark ? "#1A2B48" : colors[0]);
         Application.Current.Resources["RowFill"] = palette.Scene != ThemeScene.Plain || palette.NativeGlass ? ThemeArtwork.Brush(palette.Dark ? "#071D3045" : "#08FFFFFF") : ThemeArtwork.Brush(colors[1]);
         Application.Current.Resources["RowAlternate"] = palette.Scene != ThemeScene.Plain || palette.NativeGlass ? ThemeArtwork.Brush(palette.Dark ? "#121C8EB0" : "#14285B96") : ThemeArtwork.Brush(colors[7]);
         Application.Current.Resources["UiFont"] = new FontFamily(palette.Font);
@@ -56,7 +68,7 @@ public sealed class DisplaySettings
         Application.Current.Resources["MessageRowHeight"] = (double)palette.RowHeight;
         if (palette.Scene == ThemeScene.Liquid)
         {
-            var edge = new LinearGradientBrush(ThemeArtwork.Color("#FCFFFFFF"), ThemeArtwork.Color("#9C7BAEDC"), 80); edge.Freeze();
+            var edge = new LinearGradientBrush(ThemeArtwork.Color("#E0FFFFFF"), ThemeArtwork.Color("#606D9DC7"), 80); edge.Freeze();
             Application.Current.Resources["Line"] = edge;
         }
         Application.Current.Resources["CardRadius"] = new CornerRadius(palette.CardRadius);

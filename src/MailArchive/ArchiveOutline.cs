@@ -5,11 +5,12 @@ namespace MailArchive;
 public sealed record ArchiveFolder(Folder Source, int Messages, List<ArchiveFolder> Children, bool ReadWarning = false);
 public sealed record ArchiveOutline(List<ArchiveFolder> Folders, List<string> Warnings)
 {
-    public static ArchiveOutline Read(XstFile archive, Folder root, bool includeService)
+    public static ArchiveOutline Read(XstFile archive, Folder root, bool includeService, CancellationToken cancellation = default)
     {
         var warnings = new List<string>();
         List<ArchiveFolder> Visit(Folder folder, int depth, bool rootNode = false)
         {
+            cancellation.ThrowIfCancellationRequested();
             if (!rootNode && !includeService && ExportFolderLayout.IsServiceBranch(folder, depth - 1))
                 return [];
             bool nonMailContainer = !includeService && new[] { "IPF.Appointment", "IPF.Contact", "IPF.Task", "IPF.Journal", "IPF.StickyNote", "IPF.Configuration" }
