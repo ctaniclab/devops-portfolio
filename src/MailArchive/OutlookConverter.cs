@@ -37,7 +37,7 @@ public static class OutlookConverter
         if (format == ExportFormat.Pst) ArchiveUtilities.ValidateDestination(source, target);
         else ArchiveUtilities.ValidateMsgDestination(target);
         var chosen = selections ?? (selection is null ? null : new[] { selection });
-        if (chosen is { Count: 0 }) throw new InvalidOperationException("Не выбрано ни одного сообщения.");
+        if (chosen is { Count: 0 }) throw new InvalidOperationException(L.T("Не выбрано ни одного сообщения."));
         var selectedIds = chosen?.Distinct().GroupBy(s => s.FolderId).ToDictionary(g => g.Key, g => g.Select(s => s.MessageId).ToHashSet());
         var id = Guid.NewGuid().ToString("N");
         var reportPath = target + "." + id + ".conversion.json";
@@ -66,25 +66,25 @@ public static class OutlookConverter
                     var headers = archive.ReadMessages(folder);
                     var available = headers.Select(m => m.Nid.dwValue).ToHashSet();
                     if (group.Any(selectedMessage => !available.Contains(selectedMessage.MessageId)))
-                        throw new InvalidOperationException("Выбранное сообщение больше не найдено в исходном архиве. Откройте файл заново и повторите выбор.");
+                        throw new InvalidOperationException(L.T("Выбранное сообщение больше не найдено в исходном архиве. Откройте файл заново и повторите выбор."));
                     folder.Messages.Clear();
                 }
             }
             if (format == ExportFormat.Pst)
             {
                 var type = Type.GetTypeFromProgID("Outlook.Application")
-                    ?? throw new InvalidOperationException("Не найден классический Outlook. Новый Outlook не поддерживает COM. Установите и настройте классический Outlook.");
+                    ?? throw new InvalidOperationException(L.T("Не найден классический Outlook. Новый Outlook не поддерживает COM. Установите и настройте классический Outlook."));
                 dynamic app = session.Keep(Activator.CreateInstance(type)!);
                 outlookNamespace = session.Keep(app.GetNamespace("MAPI"));
             }
             var writer = new MailWriterContext((object?)outlookNamespace, format, target,
                 format == ExportFormat.Msg ? new MsgFolderLayout(root) : null, chosen?.Distinct().Count(), journal);
-            progress.Report(new(0, 0, 0, 0, format == ExportFormat.Msg ? "Подготовка MSG" : "Подготовка Outlook", writer.Total));
+            progress.Report(new(0, 0, 0, 0, format == ExportFormat.Msg ? L.T("Подготовка MSG") : L.T("Подготовка Outlook"), writer.Total));
             if (format == ExportFormat.Msg)
             {
                 Directory.CreateDirectory(target);
                 CopyFolder(archive, root, () => new object(), report, progress, cancellation, writer, selectedIds);
-                progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, "Проверка результата", writer.Total, true));
+                progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, L.T("Проверка результата"), writer.Total, true));
                 report.OutputMessagesVerified = report.MsgFiles.Count;
                 report.MsgReadBackVerified = report.Converted > 0 && report.ContentVerified == report.Converted && report.MsgFiles.Count == report.Converted;
                 report.Completed = report.FolderErrors == 0 && report.Failed == 0 && report.MsgReadBackVerified;
@@ -108,11 +108,11 @@ public static class OutlookConverter
                     break;
                 }
             }
-            if (targetRoot is null) throw new IOException("Outlook не подключил созданный PST.");
+            if (targetRoot is null) throw new IOException(L.T("Outlook не подключил созданный PST."));
             targetRoot.Name = Path.GetFileNameWithoutExtension(target);
             // Mail folders sit directly under the named archive, without an extra import wrapper.
             CopyFolder(archive, root, () => (object)targetRoot, report, progress, cancellation, writer, selectedIds);
-            progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, "Проверка PST", writer.Total, true));
+            progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, L.T("Проверка PST"), writer.Total, true));
             PstInventory.Verify(report, OutlookPst.ReadFolderCounts((object)targetRoot));
             cancellation.ThrowIfCancellationRequested();
             report.Completed = report.FolderErrors == 0 && report.Failed == 0;
@@ -135,7 +135,7 @@ public static class OutlookConverter
                 {
                     report.Completed = false;
                     report.FatalError ??= OutlookConnection.IsDisconnected(e) ? new OutlookDisconnectedException(e).Message
-                        : "Не удалось отключить выходной PST от Outlook: " + e.Message;
+                        : L.T("Не удалось отключить выходной PST от Outlook: ") + e.Message;
                 }
             }
             session.Dispose();
@@ -144,7 +144,7 @@ public static class OutlookConverter
         if (report.Converted == 0)
         {
             report.Completed = false;
-            report.FatalError ??= "Ни одно письмо не сохранено. Проверьте причины пропуска и ошибок в отчёте.";
+            report.FatalError ??= L.T("Ни одно письмо не сохранено. Проверьте причины пропуска и ошибок в отчёте.");
         }
         if (format == ExportFormat.Pst) OutputFileStatus.Apply(report, target, detached);
         else if (!report.Completed && Directory.Exists(target)) report.RetainedPartialDirectory = target;
@@ -201,7 +201,7 @@ public static class OutlookConverter
             catch (COMException error) when (!OutlookConnection.IsDisconnected(error))
             {
                 report.FolderErrors++;
-                report.Issues.Add(new(child.Path, "", "Outlook не создал папку: " + error.Message, "CreateFolder", error.ToString()));
+                report.Issues.Add(new(child.Path, "", L.T("Outlook не создал папку: ") + error.Message, "CreateFolder", error.ToString()));
                 continue;
             }
         }
@@ -224,12 +224,12 @@ public static class OutlookConverter
                 archive.ReadMessageDetails(message);
                 messageClass = ConvertString(message, 0x001A);
                 if (messageClass != "IPM.Note")
-                    throw new UnsupportedMessageException("Не поддерживается тип элемента: " + (messageClass ?? "неизвестен"));
+                    throw new UnsupportedMessageException(L.T("Не поддерживается тип элемента: ") + (messageClass ?? L.T("неизвестен")));
                 if (message.Attachments.Any(a => !a.IsFile))
-                    throw new UnsupportedMessageException("Вложенное сообщение, OLE или ссылочное вложение: письмо пропущено целиком.");
+                    throw new UnsupportedMessageException(L.T("Вложенное сообщение, OLE или ссылочное вложение: письмо пропущено целиком."));
                 if (message.Attachments.Any(a => string.Equals(a.FileName, "smime.p7m", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(a.MimeTag, "application/pkcs7-mime", StringComparison.OrdinalIgnoreCase)))
-                    throw new UnsupportedMessageException("S/MIME требует отдельной обработки: письмо пропущено.");
+                    throw new UnsupportedMessageException(L.T("S/MIME требует отдельной обработки: письмо пропущено."));
                 stage = "PrepareBody";
                 var body = PreparedBody.FromMessage(message);
                 stage = "WriteMessage";
@@ -358,22 +358,22 @@ public static class OutlookConverter
                 dynamic destination = target;
                 dynamic ns = writer.Session!;
                 if (!ns.CompareEntryIDs((string)parent.StoreID, (string)destination.StoreID))
-                    throw new IOException("Нельзя изолировать элемент вне выходного PST.");
+                    throw new IOException(L.T("Нельзя изолировать элемент вне выходного PST."));
                 dynamic store = scope.Keep(destination.Store);
                 dynamic root = scope.Keep(store.GetRootFolder());
                 dynamic folders = scope.Keep(root.Folders);
-                dynamic quarantine = scope.Keep(folders.Add("Непроверенное-" + Guid.NewGuid().ToString("N"), 6));
+                dynamic quarantine = scope.Keep(folders.Add(L.T("Непроверенное-") + Guid.NewGuid().ToString("N"), 6));
                 dynamic isolated = scope.Keep(item.Move(quarantine));
                 dynamic isolatedParent = scope.Keep(isolated.Parent);
                 if (!ns.CompareEntryIDs((string)isolatedParent.StoreID, (string)destination.StoreID)
                     || !ns.CompareEntryIDs((string)isolatedParent.EntryID, (string)quarantine.EntryID))
-                    throw new IOException("Не подтверждена папка изоляции.");
-                throw new SavedMailVerificationException(failure.Message + " Элемент изолирован в папке «" + (string)quarantine.Name + "» выходного PST.");
+                    throw new IOException(L.T("Не подтверждена папка изоляции."));
+                throw new SavedMailVerificationException(failure.Message + L.T(" Элемент изолирован в папке «") + (string)quarantine.Name + L.T("» выходного PST."));
             }
             catch (SavedMailVerificationException) { throw; }
             catch (Exception isolationFailure)
             {
-                throw new AggregateException("Проверка переноса не пройдена; изолировать элемент не удалось. Частичный PST требует проверки.", failure, isolationFailure);
+                throw new AggregateException(L.T("Проверка переноса не пройдена; изолировать элемент не удалось. Частичный PST требует проверки."), failure, isolationFailure);
             }
         }
         finally

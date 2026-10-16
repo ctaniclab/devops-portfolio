@@ -2,15 +2,15 @@ namespace MailArchive;
 
 public sealed record ConversionEstimateValue(double? Percent, TimeSpan Elapsed, TimeSpan? Remaining, bool Stalled, bool Finalizing)
 {
-    public string Label => (Percent is double p ? $"{p:0} % · " : "") + (Finalizing ? "Проверка и закрытие файла…"
-        : Stalled ? "Оценка времени уточняется…" : Remaining is TimeSpan left ? "Осталось ≈ " + Duration(left) : "Осталось: расчёт…")
-        + " · Прошло " + Duration(Elapsed);
+    public string Label => (Percent is double p ? $"{p:0} % · " : "") + (Finalizing ? L.T("Проверка и закрытие файла…")
+        : Stalled ? L.T("Оценка времени уточняется…") : Remaining is TimeSpan left ? L.T("Осталось ≈ ") + Duration(left) : L.T("Осталось: расчёт…"))
+        + L.T(" · Прошло ") + Duration(Elapsed);
     public static string Duration(TimeSpan value)
     {
         value = value < TimeSpan.Zero ? TimeSpan.Zero : value;
-        if (value.TotalHours >= 1) return $"{(int)value.TotalHours} ч {value.Minutes:00} мин";
-        if (value.TotalMinutes >= 1) return $"{(int)value.TotalMinutes} мин {value.Seconds:00} с";
-        return value.TotalSeconds < 1 ? "< 1 с" : $"{(int)value.TotalSeconds} с";
+        if (value.TotalHours >= 1) return L.F($"{(int)value.TotalHours} ч {value.Minutes:00} мин");
+        if (value.TotalMinutes >= 1) return L.F($"{(int)value.TotalMinutes} мин {value.Seconds:00} с");
+        return value.TotalSeconds < 1 ? L.T("< 1 с") : L.F($"{(int)value.TotalSeconds} с");
     }
 }
 

@@ -1,12 +1,12 @@
 namespace MailArchive;
 
-public enum ThemeScene { Plain, Stars, Ocean, Aurora, Neon, Liquid, Terminal }
+public enum ThemeScene { Plain, Stars, Orbital, Ocean, Aurora, Neon, Liquid, Terminal }
 
 public sealed record ThemePalette(bool Dark, string[] Colors, string? GradientEnd = null, ThemeScene Scene = ThemeScene.Plain,
     int CardRadius = 14, int ButtonRadius = 10, bool NativeGlass = false, string Font = "Segoe UI", string TitleFont = "Segoe UI",
     double BorderSize = 1, int RowHeight = 38, string Description = "")
 {
-    public static IReadOnlyList<string> Names { get; } = new[] { "Системная", "Светлая", "Тёмная", "Классическая", "Liquid Glass", "Прозрачная", "Космос", "Океан", "Аврора", "Неон", "Терминал" };
+    public static IReadOnlyList<string> Names { get; } = new[] { "Системная", "Светлая", "Тёмная", "Классическая", "Liquid Glass", "Прозрачная", "Космос", "Океан", "Аврора", "Неон", "Терминал", "Бумага", "Графит" };
     public static string Migrate(string name) => name == "Стекло" ? "Liquid Glass" : Names.Contains(name) ? name : "Системная";
     public static ThemePalette Get(string name, bool systemDark = false) => name switch
     {
@@ -17,7 +17,11 @@ public sealed record ThemePalette(bool Dark, string[] Colors, string? GradientEn
             CardRadius: 30, ButtonRadius: 22, NativeGlass: true, Description: "Liquid Glass · светлое стекло, блики и объёмные капсулы"),
         "Прозрачная" => new(true, ["#11233B", "#D21A2B48", "#F3F7FF", "#DFE9FA", "#2D5790", "#293F61", "#7898C4", "#DB12233D", "#253F5C", "#9ABCE2", "#D3E7FF", "#354E76"], "#254668",
             CardRadius: 12, ButtonRadius: 8, NativeGlass: true, Description: "Тёмное прозрачное окно · фон рабочего стола с размытием"),
-        "Космос" => new(true, ["#0D1026", "#EE171D35", "#F0F2FF", "#C0C6E6", "#6C48D7", "#343157", "#535473", "#202741", "#353C5C", "#A6A9D6", "#DBDEFF", "#403966"], "#30204D", ThemeScene.Stars, CardRadius: 18, ButtonRadius: 12, Description: "Звёздное небо · глубокий фиолетовый"),
+        "Космос" => new(true, ["#080D15", "#EE111C29", "#F6F1E8", "#C8C6C0", "#8A4B17", "#313028", "#71604A", "#182431", "#293441", "#C19F6A", "#FFE3AE", "#39372F"], "#182A3B", ThemeScene.Orbital,
+            CardRadius: 8, ButtonRadius: 6, TitleFont: "Bahnschrift", Description: "Орбитальная станция · графит, янтарь, планета и линии орбит"),
+        "Бумага" => PaperPalette,
+        "Графит" => new(true, ["#141414", "#222222", "#FAFAFA", "#C6C6C6", "#555555", "#363636", "#686868", "#292929", "#3B3B3B", "#AAAAAA", "#EEEEEE", "#404040"],
+            CardRadius: 6, ButtonRadius: 4, Description: "Графит · нейтральный серый, без синего оттенка и фоновых эффектов"),
         "Океан" => new(true, ["#072E3C", "#E00B3444", "#E9FBFF", "#B9DFE7", "#156172", "#164F61", "#44879A", "#0B3A4C", "#144A5D", "#88C5D5", "#CEF7FF", "#205769"], "#0A5964", ThemeScene.Ocean,
             CardRadius: 20, ButtonRadius: 10, Description: "Глубина океана · волны, бирюза и морская пена"),
         "Аврора" => new(true, ["#171729", "#E0212339", "#FBF1FE", "#E3CDE8", "#7653A8", "#473C62", "#8A759F", "#2B2D46", "#493F5E", "#BAA1D1", "#EBD4FF", "#57466D"], "#493553", ThemeScene.Aurora,
@@ -28,7 +32,9 @@ public sealed record ThemePalette(bool Dark, string[] Colors, string? GradientEn
             CardRadius: 0, ButtonRadius: 0, Font: "Consolas", TitleFont: "Consolas", RowHeight: 34, Description: "Терминал · моноширинный шрифт, зелёный фосфор и прямые линии"),
         _ => LightPalette
     };
-    private static ThemePalette LightPalette => new(false, ["#F6F1E6", "#FFFCF5", "#302B22", "#62553F", "#845525", "#F1E4CC", "#CDBF9F", "#F7EEDD", "#E7DCC6", "#8F7954", "#68502D", "#EAD8B9"],
+    private static ThemePalette PaperPalette => new(false, ["#F6F1E6", "#FFFCF5", "#302B22", "#62553F", "#845525", "#F1E4CC", "#CDBF9F", "#F7EEDD", "#E7DCC6", "#8F7954", "#68502D", "#EAD8B9"],
         CardRadius: 4, ButtonRadius: 4, TitleFont: "Georgia", Description: "Тёплая бумага · книжный заголовок, охра и чёткие границы");
+    private static ThemePalette LightPalette => new(false, ["#F4F6F8", "#FFFFFF", "#18212B", "#4B5968", "#175FA8", "#E4EFFB", "#B5C4D4", "#FFFFFF", "#DFE7EF", "#627D97", "#294D70", "#DAE9F8"],
+        CardRadius: 12, ButtonRadius: 8, Description: "Светлая · белые поверхности, нейтральный фон и синие акценты без прозрачности");
     private static ThemePalette DarkPalette => new(true, ["#171D2A", "#232D40", "#F0F4FC", "#BAC8DF", "#5368C9", "#344666", "#465774", "#1C2536", "#34425C", "#A2B5D8", "#D0DEFA", "#314A72"], Description: "Спокойная тёмная тема · матовые панели без эффектов");
 }

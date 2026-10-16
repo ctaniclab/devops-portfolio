@@ -66,13 +66,18 @@ jobs:
             throw 'Published EXE self-check failed.'
           }
           $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (-not $result.GlassPanelsVerified -or -not $result.DisabledTreeVerified -or -not $result.TabBoundsVerified -or -not $result.OfflineMsgExportVerified) { throw 'Glass panels, disabled tree, tab clipping or offline MSG export check failed.' }
+          if (-not $result.TrayVerified -or -not $result.LocalizationVerified -or -not $result.GlassPanelsVerified -or -not $result.DisabledTreeVerified -or -not $result.TabBoundsVerified -or -not $result.OfflineMsgExportVerified) { throw 'Glass panels, disabled tree, tab clipping or offline MSG export check failed.' }
           if (-not $result.HtmlRenderingVerified -or -not $result.MainWindowVerified -or -not $result.ReaderWindowVerified -or -not $result.ThemedScrollBarsVerified -or -not $result.ExportWizardVerified -or -not $result.AllThemesVerified -or -not $result.NativeCaptionApiAccepted -or -not $result.NativeDarkModeVerified -or -not $result.GlassFallbackVerified -or -not $result.ConversionProgressUiVerified -or -not $result.ExecutableIconVerified) { throw 'Email HTML rendering or application UI was not verified.' }
           Copy-Item $report dist/preview-report.json
           Copy-Item "$report.png" dist/ui-preview.png
           Copy-Item "$report.dark.png" dist/ui-dark.png
           Copy-Item "$report.reader.png" dist/ui-reader.png
           Copy-Item "$report.wizard.png" dist/ui-export-wizard.png
+          Copy-Item "$report.tray.png" dist/ui-tray.png
+          foreach ($language in @('ru', 'en')) {
+            Copy-Item "$report.main-$language.png" "dist/ui-main-$language.png"
+            Copy-Item "$report.convert-$language.png" "dist/ui-convert-$language.png"
+          }
           Copy-Item "$report.classic.window.png" dist/ui-classic-window.png
           Copy-Item "$report.space.window.png" dist/ui-space-window.png
           foreach ($theme in @('liquid', 'transparent', 'aurora', 'neon', 'terminal')) { Copy-Item "$report.$theme.window.png" "dist/ui-$theme-window.png" }
@@ -82,19 +87,24 @@ jobs:
       - name: Prepare release assets
         shell: pwsh
         run: |
-          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.6.1.exe
-          (Get-FileHash dist/MailArchive-1.6.1.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.6.1.exe' | Set-Content -Encoding ascii dist/MailArchive-1.6.1.exe.sha256
+          Copy-Item dist/win-x64/MailArchive.exe dist/MailArchive-1.7.0.exe
+          (Get-FileHash dist/MailArchive-1.7.0.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  MailArchive-1.7.0.exe' | Set-Content -Encoding ascii dist/MailArchive-1.7.0.exe.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: MailArchive-1.6.1-verified
+          name: MailArchive-1.7.0-verified
           path: |
-            dist/MailArchive-1.6.1.exe
-            dist/MailArchive-1.6.1.exe.sha256
+            dist/MailArchive-1.7.0.exe
+            dist/MailArchive-1.7.0.exe.sha256
             dist/MailArchive-win-x64.zip
             dist/defender-report.json
             dist/defender-report.json.txt
             dist/preview-report.json
             dist/ui-preview.png
+            dist/ui-tray.png
+            dist/ui-main-ru.png
+            dist/ui-main-en.png
+            dist/ui-convert-ru.png
+            dist/ui-convert-en.png
             dist/ui-dark.png
             dist/ui-reader.png
             dist/ui-export-wizard.png
@@ -124,6 +134,11 @@ jobs:
             dist/defender-report.json*
             dist/preview-report.json
             dist/ui-preview.png
+            dist/ui-tray.png
+            dist/ui-main-ru.png
+            dist/ui-main-en.png
+            dist/ui-convert-ru.png
+            dist/ui-convert-en.png
             dist/ui-dark.png
             dist/ui-reader.png
             dist/ui-export-wizard.png
@@ -155,7 +170,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: MailArchive-1.6.1-verified
+          name: MailArchive-1.7.0-verified
           path: release
       - name: Publish only after tests, preview and Defender passed
         env:
@@ -163,8 +178,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          if gh release view v1.6.1 >/dev/null 2>&1; then
-            echo 'Version v1.6.1 already exists; existing assets will not be overwritten.'
+          if gh release view v1.7.0 >/dev/null 2>&1; then
+            echo 'Version v1.7.0 already exists; existing assets will not be overwritten.'
             exit 0
           fi
-          gh release create v1.6.1 --target '${{ github.sha }}' --title 'Mail Archive 1.6.1' --notes 'Adds a durable per-message conversion journal, recipient address/role and sender verification, and isolation of newly moved PST items that fail validation. Selection loading can be cancelled; full folder paths distinguish similarly named folders. Search waits for a short typing pause. Tab spacing no longer clips rounded right edges and Windows UI checks now check horizontal bounds. Includes 165 portable checks, six independently verified MSG fixtures, Windows EXE UI/MSG checks and Defender scan. PST automation on a real Outlook profile and HDR hardware remain untested on hosted CI. Automatic resume is not supported; existing account messages are never deleted.' release/*
+          gh release create v1.7.0 --target '${{ github.sha }}' --title 'Mail Archive 1.7.0' --notes 'Adds conversion to the Windows notification area with a hover progress card, ETA, completion notification and click-to-restore. During conversion, closing or minimizing the window keeps the conversion running in the tray. Light now uses neutral white surfaces; Paper and Graphite are separate themes; Space has new orbital artwork. Adds Russian and English UI selection (restart required), bilingual documentation and actual localized Windows screenshots. Mail contents and original folder names are not translated. Verified by portable checks, independent MSG reading, Windows tray/UI/localization checks and Defender. Real Outlook PST automation and physical HDR hardware are not verified on hosted CI.' release/*

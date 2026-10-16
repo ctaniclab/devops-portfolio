@@ -37,19 +37,19 @@ public static class WindowTheme
         string? unavailable = null;
         if (palette.NativeGlass)
         {
-            if (!DisplaySettings.Current.GlassEffects) unavailable = "Эффекты стекла отключены в приложении";
-            else if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621)) unavailable = "Для прозрачности нужна Windows 11 22H2 или новее";
-            else if (SystemParameters.HighContrast) unavailable = "Непрозрачный режим: включена высокая контрастность Windows";
+            if (!DisplaySettings.Current.GlassEffects) unavailable = L.T("Эффекты стекла отключены в приложении");
+            else if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621)) unavailable = L.T("Для прозрачности нужна Windows 11 22H2 или новее");
+            else if (SystemParameters.HighContrast) unavailable = L.T("Непрозрачный режим: включена высокая контрастность Windows");
             else
             {
                 try
                 {
                     using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
                     if (key?.GetValue("EnableTransparency") is int enabled && enabled == 0)
-                        unavailable = "Непрозрачный режим: в Windows отключены эффекты прозрачности";
+                        unavailable = L.T("Непрозрачный режим: в Windows отключены эффекты прозрачности");
                 }
                 catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or IOException)
-                { unavailable = "Непрозрачный режим: настройки прозрачности Windows недоступны"; }
+                { unavailable = L.T("Непрозрачный режим: настройки прозрачности Windows недоступны"); }
             }
         }
         int result = 0;
@@ -58,20 +58,20 @@ public static class WindowTheme
         {
             int material = active ? 3 : 1; // Desktop Acrylic / none; documented DWMSBT values.
             result = DwmSetWindowAttribute(handle, 38, ref material, sizeof(int));
-            if (active && result != 0) { active = false; unavailable = "Непрозрачный режим: эффект недоступен в текущем сеансе Windows"; }
+            if (active && result != 0) { active = false; unavailable = L.T("Непрозрачный режим: эффект недоступен в текущем сеансе Windows"); }
         }
         var margins = active ? new Margins { Left = -1, Right = -1, Top = -1, Bottom = -1 } : new Margins();
         int frame = DwmExtendFrameIntoClientArea(handle, ref margins);
         if (active && frame != 0)
         {
-            active = false; result = frame; unavailable = "Непрозрачный режим: размытие окна недоступно";
+            active = false; result = frame; unavailable = L.T("Непрозрачный режим: размытие окна недоступно");
             margins = new(); DwmExtendFrameIntoClientArea(handle, ref margins);
             int none = 1; DwmSetWindowAttribute(handle, 38, ref none, sizeof(int));
         }
         if (HwndSource.FromHwnd(handle)?.CompositionTarget is HwndTarget target)
             target.BackgroundColor = active ? Colors.Transparent : ThemeArtwork.Color(palette.Colors[0]);
         window.SetResourceReference(Window.BackgroundProperty, active ? "Canvas" : "CanvasOpaque");
-        return new(palette.NativeGlass, active, result, active ? "Прозрачность Windows включена" : unavailable ?? "");
+        return new(palette.NativeGlass, active, result, active ? L.T("Прозрачность Windows включена") : unavailable ?? "");
     }
 
     private static int ColorRef(string hex)

@@ -10,9 +10,10 @@
     <ApplicationIcon>Assets/app-icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MailArchive</AssemblyName>
-    <Version>1.6.1</Version>
+    <Version>1.7.0</Version>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Strings/en.json" LogicalName="MailArchive.Strings.en.json" />
     <Resource Include="Assets/archive-hero.png" />
     <Resource Include="Assets/app-icon.ico" />
     <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="MailArchive.Licenses.NOTICES.md" />

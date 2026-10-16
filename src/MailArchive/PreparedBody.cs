@@ -16,7 +16,7 @@ public sealed record PreparedBody(string Html, string Text, bool ConvertedFromRt
         if (message.RtfCompressed is { Length: > 0 })
         {
             using var decoded = new RtfDecompressor().Decompress(message.RtfCompressed, true)
-                ?? throw new InvalidDataException("Не удалось распаковать RTF-текст письма.");
+                ?? throw new InvalidDataException(L.T("Не удалось распаковать RTF-текст письма."));
             decoded.Position = 0;
             // Use a byte stream so RtfPipe can honor the RTF's own ansicpg/Unicode escapes.
             var html = RtfPipe.Rtf.ToHtml(decoded);

@@ -59,10 +59,10 @@ public static class OutlookPst
     {
         path = Path.GetFullPath(path);
         if (!string.Equals(Path.GetExtension(path), ".pst", StringComparison.OrdinalIgnoreCase) || !File.Exists(path))
-            throw new IOException("Выберите существующий PST-файл.");
+            throw new IOException(L.T("Выберите существующий PST-файл."));
         using var scope = new ComScope();
         var type = Type.GetTypeFromProgID("Outlook.Application")
-            ?? throw new InvalidOperationException("Для открытия PST нужен классический Outlook.");
+            ?? throw new InvalidOperationException(L.T("Для открытия PST нужен классический Outlook."));
         dynamic app = scope.Keep(Activator.CreateInstance(type)!);
         dynamic session = scope.Keep(app.GetNamespace("MAPI"));
         object? FindRoot()
@@ -79,7 +79,7 @@ public static class OutlookPst
         }
         var root = FindRoot();
         if (root is null) { session.AddStoreEx(path, 2); root = FindRoot(); }
-        if (root is null) throw new IOException("Outlook не подключил выбранный PST.");
+        if (root is null) throw new IOException(L.T("Outlook не подключил выбранный PST."));
 
         var folders = ReadFolderCounts(root);
         var first = folders.OrderByDescending(f => new[] { "Inbox", "Входящие" }.Contains(f.Path.Split('\\').Last(), StringComparer.OrdinalIgnoreCase))
@@ -96,7 +96,7 @@ public static class OutlookPst
                 if (first.Path == childPath || first.Path.StartsWith(childPath + "\\", StringComparison.OrdinalIgnoreCase))
                     return FindFolder((object)child);
             }
-            throw new IOException("Outlook не нашёл папку с сохранёнными письмами.");
+            throw new IOException(L.T("Outlook не нашёл папку с сохранёнными письмами."));
         }
         dynamic chosen = FindFolder(root);
         dynamic explorer = scope.Keep(chosen.GetExplorer(0));

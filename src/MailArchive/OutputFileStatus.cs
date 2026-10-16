@@ -10,7 +10,7 @@ internal static class OutputFileStatus
         if (report.Completed && (!detached || !exists))
         {
             report.Completed = false;
-            report.FatalError ??= exists ? "Outlook не отключил выходное хранилище." : "Outlook не создал выходной PST.";
+            report.FatalError ??= exists ? L.T("Outlook не отключил выходное хранилище.") : L.T("Outlook не создал выходной PST.");
         }
         if (!report.Completed && exists) report.RetainedPartialFile = target;
     }

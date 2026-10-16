@@ -250,20 +250,64 @@ public static class UiSelfCheck
                 Capture(wizard, output + ".wizard.png");
                 wizard.Close(); wizardVerified = true;
             }
+            using (var tray = new ConversionTray(main))
+            {
+                tray.Update(new(42, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(3), false, false), "Проверка трея · 42 из 100");
+                try
+                {
+                    if (!tray.HideToTray() || main.IsVisible) throw new IOException("Native tray icon did not hide the main window.");
+                    tray.ShowPreviewForCheck();
+                    await main.Dispatcher.InvokeAsync(tray.PreviewForCheck.UpdateLayout, DispatcherPriority.ApplicationIdle);
+                    Capture(tray.PreviewForCheck, output + ".tray.png");
+                }
+                finally { tray.Restore(); }
+                if (!main.IsVisible) throw new IOException("Tray restore did not restore the main window.");
+            }
+            foreach (var language in new[] { "ru", "en" })
+            {
+                LanguageResources.Apply(language);
+                DisplaySettings.Current.Theme = "Светлая"; DisplaySettings.Apply();
+                var localized = new MainWindow { Width = 1320, Height = 880 };
+                try
+                {
+                    localized.Show();
+                    if (fixture is not null && !await localized.LoadForCheckAsync(fixture)) throw new IOException("Localized archive browsing failed.");
+                    if ((string)((Button)localized.FindName("OpenButton")).Content != L.T("Открыть OST / PST…"))
+                        throw new IOException("Main window did not load its language resources.");
+                    await localized.Dispatcher.InvokeAsync(localized.UpdateLayout, DispatcherPriority.ApplicationIdle);
+                    Capture(localized, output + ".main-" + language + ".png");
+                    ((TabControl)localized.FindName("ModeTabs")).SelectedIndex = 1;
+                    await localized.Dispatcher.InvokeAsync(localized.UpdateLayout, DispatcherPriority.ApplicationIdle);
+                    Capture(localized, output + ".convert-" + language + ".png");
+                    if (fixture is not null)
+                    {
+                        var wizard = new ExportWizard(fixture, false) { Owner = localized };
+                        try
+                        {
+                            wizard.Show(); await wizard.Ready.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                            if ((string)((Button)wizard.FindName("AllButton")).Content != L.T("Выбрать все"))
+                                throw new IOException("Export wizard did not load its language resources.");
+                        }
+                        finally { wizard.Close(); }
+                    }
+                }
+                finally { localized.Close(); }
+            }
+            LanguageResources.Apply("ru");
             exit = 0;
         }
         catch (Exception failure) { error = failure.ToString(); }
         finally
         {
             reader?.Close(); main?.Close();
-            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.6.1", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
+            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.7.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
                 HtmlRenderingVerified = htmlVerified, ThemedScrollBarsVerified = scrollbarsVerified, ExportWizardVerified = wizardVerified,
                 ThemesVerified = verifiedThemes, AllThemesVerified = verifiedThemes.Count == ThemePalette.Names.Count,
                 NativeCaptionApiAccepted = captionVerified, NativeDarkModeVerified = captionVerified,
                 NativeCaptionColorReadBackAvailable = false,
                 GlassFallbackVerified = glassFallbackVerified, ConversionProgressUiVerified = progressUiVerified, Backdrops = backdrops, ExecutableIconVerified = iconVerified,
                 GlassPanelsVerified = glassPanelsVerified, DisabledTreeVerified = disabledTreeVerified, TabBoundsVerified = tabBoundsVerified, OfflineMsgExportVerified = offlineMsgVerified,
-                HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
+                TrayVerified = exit == 0, LocalizationVerified = exit == 0, HdrHardwareVerified = false, CompatibleRendering = DisplaySettings.Current.CompatibleRendering, Error = error }));
             Application.Current.Shutdown(exit);
         }
     }

@@ -24,6 +24,18 @@ ContentChecks.Run(Check);
 TransferChecks.Run(Check);
 ThemeChecks.Run(Check);
 TimingChecks.Run(Check);
+try
+{
+    L.SetLanguage("en");
+    Check(L.T("Открыть OST / PST…") == "Open OST / PST…", "English UI resources are embedded and available offline");
+    string originalFolder = "Входящие {important}";
+    Check(L.F($"{originalFolder} · Элементов: {7}. Двойной щелчок открывает письмо.") == "Входящие {important} · Items: 7. Double-click to read a message.", "Localization preserves original folder names and braces in user data");
+    Check(new ConversionEstimateValue(42, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(2), false, false).Label.Contains("Remaining ≈ 2 min"), "Tray and conversion ETA use the selected language");
+    string[] Tokens(string value) => System.Text.RegularExpressions.Regex.Matches(value, @"\{\d+(?:[^{}]*)\}").Select(m => m.Value).Order().ToArray();
+    Check(L.English.All(pair => Tokens(pair.Key).SequenceEqual(Tokens(pair.Value))), "Translated format strings preserve every argument and format specifier");
+}
+finally { L.SetLanguage("ru"); }
+Check(L.T("Открыть OST / PST…") == "Открыть OST / PST…", "Russian UI remains the default and is restored after English checks");
 DateMetadataChecks.Run(Check);
 StandaloneMsgChecks.Run(Check);
 FolderLayoutChecks.Run(Check);
