@@ -15,7 +15,7 @@ internal static class FolderReadPolicy
         catch (Exception e) when (e is not OperationCanceledException and not OutOfMemoryException)
         {
             report.FolderErrors++;
-            report.Issues.Add(new(path, "", "Не удалось прочитать папку: " + e.Message, "ReadFolder", e.ToString()));
+            report.Issues.Add(new(path, "", L.T("Не удалось прочитать папку: ") + e.Message, "ReadFolder", e.ToString()));
             // The traversal still visits this folder's children and its siblings.
             return [];
         }

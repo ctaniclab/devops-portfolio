@@ -21,6 +21,21 @@ internal static class ThemeArtwork
             new RadialGradientBrush(Color(center), Color(edge)), null, new EllipseGeometry(new Point(x, y), radius, radius)));
         switch (palette.Scene)
         {
+            case ThemeScene.Orbital:
+                Orb(1140, 330, 380, "#4865A5B5", "#0065A5B5");
+                art.Children.Add(new GeometryDrawing(new LinearGradientBrush(Color("#B4864B"), Color("#101E30"), 125),
+                    new Pen(Brush("#7FC5AE82"), 2), new EllipseGeometry(new Point(1160, 320), 220, 220)));
+                for (int orbit = 0; orbit < 3; orbit++)
+                {
+                    var ellipse = new EllipseGeometry(new Point(1080, 350), 320 + orbit * 100, 135 + orbit * 45)
+                        { Transform = new RotateTransform(-28, 1080, 350) };
+                    art.Children.Add(new GeometryDrawing(null, new Pen(Brush(orbit == 0 ? "#90D6AC67" : "#405D8D9E"), orbit == 0 ? 2 : 1), ellipse));
+                }
+                for (int i = 0; i < 48; i++)
+                    art.Children.Add(new GeometryDrawing(Brush("#80D1E4EA"), null,
+                        new EllipseGeometry(new Point((i * 197 + 51) % 1400, (i * 313 + 73) % 900), 1, 1)));
+                Stroke("M 0 810 L 1400 810 M 70 0 L 70 900", "#305F91A6", 1);
+                break;
             case ThemeScene.Stars:
                 for (int i = 0; i < 90; i++)
                     art.Children.Add(new GeometryDrawing(new SolidColorBrush(System.Windows.Media.Color.FromArgb((byte)(75 + i % 145), 217, 222, 255)), null,

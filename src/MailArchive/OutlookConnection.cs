@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace MailArchive;
 
 public sealed class OutlookDisconnectedException(Exception inner) : IOException(
-    "Связь с Outlook потеряна: возможно, Outlook был закрыт. Перенос остановлен; уже сохранённые письма остались в указанном PST. Откройте Outlook и не закрывайте его во время переноса в PST. Экспорт MSG работает без Outlook.", inner);
+    L.T("Связь с Outlook потеряна: возможно, Outlook был закрыт. Перенос остановлен; уже сохранённые письма остались в указанном PST. Откройте Outlook и не закрывайте его во время переноса в PST. Экспорт MSG работает без Outlook."), inner);
 
 public static class OutlookConnection
 {

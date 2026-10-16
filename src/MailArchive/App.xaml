@@ -1,5 +1,7 @@
-<Application x:Class="MailArchive.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:pr="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework">
+<Application xmlns:local="clr-namespace:MailArchive" x:Class="MailArchive.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:pr="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework">
   <Application.Resources>
+    <local:ThemeNameConverter x:Key="ThemeNameConverter"/>
+    <DataTemplate x:Key="ThemeNameTemplate"><TextBlock Text="{Binding Converter={StaticResource ThemeNameConverter}}"/></DataTemplate>
     <Thickness x:Key="PanelBorderSize">1</Thickness><Thickness x:Key="HeaderPadding">0</Thickness>
     <FontFamily x:Key="UiFont">Segoe UI</FontFamily><FontFamily x:Key="TitleFont">Segoe UI</FontFamily>
     <SolidColorBrush x:Key="PanelFill" Color="#FFFFFF"/><SolidColorBrush x:Key="CanvasOpaque" Color="#EEF1F7"/>

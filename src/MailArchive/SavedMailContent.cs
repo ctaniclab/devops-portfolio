@@ -24,7 +24,7 @@ public sealed record SavedMailContent(string Subject, string Html, string Text, 
     public void Verify(SavedMailContent actual)
     {
         if (!string.Equals(Subject.Normalize(NormalizationForm.FormC), actual.Subject.Normalize(NormalizationForm.FormC), StringComparison.Ordinal))
-            throw new SavedMailVerificationException("После сохранения и повторного открытия не совпала тема письма.");
+            throw new SavedMailVerificationException(L.T("После сохранения и повторного открытия не совпала тема письма."));
         var expectedText = VisibleText(Html);
         var actualText = VisibleText(actual.Html);
         if (actualText.Length == 0) actualText = Normalize(actual.Text);
@@ -34,18 +34,18 @@ public sealed record SavedMailContent(string Subject, string Html, string Text, 
         foreach (var character in actualText)
             if (matched < expectedText.Length && expectedText[matched] == character) matched++;
         if (matched != expectedText.Length)
-            throw new SavedMailVerificationException("После сохранения и повторного открытия текст письма отсутствует или неполон.");
+            throw new SavedMailVerificationException(L.T("После сохранения и повторного открытия текст письма отсутствует или неполон."));
         if (expectedText.Length == 0 && new HtmlParser().ParseDocument(Html).QuerySelector("img") is not null
             && new HtmlParser().ParseDocument(actual.Html).QuerySelector("img") is null)
-            throw new SavedMailVerificationException("После сохранения пропало изображение из письма без текста.");
+            throw new SavedMailVerificationException(L.T("После сохранения пропало изображение из письма без текста."));
         if (actual.Recipients != Recipients)
-            throw new SavedMailVerificationException("После сохранения не совпало количество получателей.");
+            throw new SavedMailVerificationException(L.T("После сохранения не совпало количество получателей."));
         if (SenderAddress is not null && !string.Equals(SenderAddress.Trim(), actual.SenderAddress?.Trim(), StringComparison.OrdinalIgnoreCase))
-            throw new SavedMailVerificationException("После сохранения не совпал адрес отправителя.");
+            throw new SavedMailVerificationException(L.T("После сохранения не совпал адрес отправителя."));
         if (RecipientIdentities is not null && (actual.RecipientIdentities is null ||
             !RecipientIdentities.Order(StringComparer.Ordinal).SequenceEqual(actual.RecipientIdentities.Order(StringComparer.Ordinal))))
-            throw new SavedMailVerificationException("После сохранения не совпали адреса или типы получателей (Кому/Копия/Скрытая копия).");
+            throw new SavedMailVerificationException(L.T("После сохранения не совпали адреса или типы получателей (Кому/Копия/Скрытая копия)."));
         if (!AttachmentHashes.Order(StringComparer.Ordinal).SequenceEqual(actual.AttachmentHashes.Order(StringComparer.Ordinal), StringComparer.Ordinal))
-            throw new SavedMailVerificationException("После сохранения не совпали количество или SHA256 вложений.");
+            throw new SavedMailVerificationException(L.T("После сохранения не совпали количество или SHA256 вложений."));
     }
 }

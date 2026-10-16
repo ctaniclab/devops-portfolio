@@ -56,22 +56,22 @@ public partial class ExportWizard : Window
                     {
                         loadCancellation.Token.ThrowIfCancellationRequested();
                         var id = MessageSelection.FromMessage(message);
-                        list.Add(new() { Id = id, Subject = string.IsNullOrWhiteSpace(message.Subject) ? "Без темы" : message.Subject,
+                        list.Add(new() { Id = id, Subject = string.IsNullOrWhiteSpace(message.Subject) ? L.T("Без темы") : message.Subject,
                             Sender = message.From ?? "", Folder = node.Source.Path, Chosen = preselected is not null && preselected == id });
                     }
                     node.Source.Messages.Clear();
                 }
-                if (outline.Warnings.Count > 0) throw new IOException("Не все папки удалось прочитать. Проверьте журнал чтения архива перед выборочной конвертацией.");
+                if (outline.Warnings.Count > 0) throw new IOException(L.T("Не все папки удалось прочитать. Проверьте журнал чтения архива перед выборочной конвертацией."));
                 return list;
             });
             loadCancellation.Token.ThrowIfCancellationRequested();
             foreach (var choice in choices) choice.PropertyChanged += Choice_Changed;
             MessageChoices.ItemsSource = choices; AllButton.IsEnabled = NoneButton.IsEnabled = FoundButton.IsEnabled = true;
-            StepHint.Text = "Отметьте нужные письма галочками или нажмите «Выбрать все». Затем выберите PST или MSG.";
+            StepHint.Text = L.T("Отметьте нужные письма галочками или нажмите «Выбрать все». Затем выберите PST или MSG.");
             UpdateCount(); Ready.TrySetResult();
         }
         catch (OperationCanceledException) { Ready.TrySetCanceled(); }
-        catch (Exception error) { StepHint.Text = "Не удалось подготовить список: " + error.Message; Ready.TrySetException(error); }
+        catch (Exception error) { StepHint.Text = L.T("Не удалось подготовить список: ") + error.Message; Ready.TrySetException(error); }
         finally { loading = false; }
     }
     private void Choice_Changed(object? sender, PropertyChangedEventArgs e)
@@ -81,7 +81,7 @@ public partial class ExportWizard : Window
         Dispatcher.BeginInvoke(new Action(() => { countPending = false; UpdateCount(); }));
     }
     private void UpdateCount()
-    { int count = choices.Count(c => c.Chosen); CountText.Text = $"Выбрано: {count} из {choices.Count}"; NextButton.IsEnabled = count > 0; }
+    { int count = choices.Count(c => c.Chosen); CountText.Text = L.F($"Выбрано: {count} из {choices.Count}"); NextButton.IsEnabled = count > 0; }
     private void SetChoices(IEnumerable<MessageChoice> rows, bool value)
     { batch = true; foreach (var choice in rows) choice.Chosen = value; batch = false; UpdateCount(); }
     private void All_Click(object sender, RoutedEventArgs e) => SetChoices(choices, true);
@@ -105,16 +105,16 @@ public partial class ExportWizard : Window
             Selected = choices.Where(c => c.Chosen).Select(c => c.Id).Distinct().ToArray();
             if (Selected.Count == 0) return;
             formatStep = true; SelectionStep.Visibility = Visibility.Collapsed; FormatStep.Visibility = Visibility.Visible;
-            StepTitle.Text = "2. В какой формат сохранить?"; StepHint.Text = $"Выбрано сообщений: {Selected.Count}. После выбора формата укажите место сохранения.";
-            BackButton.Visibility = Visibility.Visible; NextButton.Content = "Выбрать место и конвертировать…";
+            StepTitle.Text = L.T("2. В какой формат сохранить?"); StepHint.Text = L.F($"Выбрано сообщений: {Selected.Count}. После выбора формата укажите место сохранения.");
+            BackButton.Visibility = Visibility.Visible; NextButton.Content = L.T("Выбрать место и конвертировать…");
         }
         else { Format = MsgChoice.IsChecked == true ? ExportFormat.Msg : ExportFormat.Pst; DialogResult = true; }
     }
     private void Back_Click(object sender, RoutedEventArgs e)
     {
         formatStep = false; SelectionStep.Visibility = Visibility.Visible; FormatStep.Visibility = Visibility.Collapsed;
-        StepTitle.Text = "1. Какие сообщения конвертировать?"; StepHint.Text = "Выбор сохранён. Можно отметить другие сообщения или выбрать все.";
-        BackButton.Visibility = Visibility.Collapsed; NextButton.Content = "Далее: выбрать формат";
+        StepTitle.Text = L.T("1. Какие сообщения конвертировать?"); StepHint.Text = L.T("Выбор сохранён. Можно отметить другие сообщения или выбрать все.");
+        BackButton.Visibility = Visibility.Collapsed; NextButton.Content = L.T("Далее: выбрать формат");
     }
     private void Cancel_Click(object sender, RoutedEventArgs e) { loadCancellation.Cancel(); DialogResult = false; }
     private void Wizard_Closing(object? sender, CancelEventArgs e) { loadCancellation.Cancel(); searchRevision++; }

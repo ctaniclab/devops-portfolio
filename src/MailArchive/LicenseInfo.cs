@@ -18,12 +18,12 @@ internal static class LicenseInfo
     }
     public static void Show(Window owner)
     {
-        var window = new Window { Owner = owner, Title = "О Mail Archive · лицензии", Width = 760, Height = 600,
+        var window = new Window { Owner = owner, Title = L.T("О Mail Archive · лицензии"), Width = 760, Height = 600,
             MinWidth = 600, MinHeight = 420, Icon = owner.Icon, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         window.SetResourceReference(Control.ForegroundProperty, "Ink");
         window.SetResourceReference(Control.FontFamilyProperty, "UiFont");
         var panel = new DockPanel { Margin = new Thickness(16) };
-        var close = new Button { Content = "Закрыть", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0), IsCancel = true };
+        var close = new Button { Content = L.T("Закрыть"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0), IsCancel = true };
         close.Click += (_, _) => window.Close(); DockPanel.SetDock(close, Dock.Bottom); panel.Children.Add(close);
         panel.Children.Add(new TextBox { Text = Text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto });

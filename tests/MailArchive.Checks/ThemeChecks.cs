@@ -33,12 +33,17 @@ internal static class ThemeChecks
             "Space uses a dark reader; classic and system themes select the intended palette");
         check(ThemePalette.Migrate("Стекло") == "Liquid Glass" && ThemePalette.Get("Liquid Glass").NativeGlass && ThemePalette.Get("Прозрачная").NativeGlass,
             "Old glass selection migrates to Liquid Glass and both glass themes request native transparency");
-        check(ThemePalette.Get("Светлая").TitleFont == "Georgia" && ThemePalette.Get("Светлая").CardRadius == 4
+        check(ThemePalette.Get("Бумага").TitleFont == "Georgia" && ThemePalette.Get("Бумага").CardRadius == 4
             && ThemePalette.Get("Классическая").CardRadius == 16 && ThemePalette.Get("Классическая").ButtonRadius == 12,
             "Paper and classic differ in typography, geometry and palette while classic preserves the old style");
         check(ThemePalette.Get("Терминал").Font == "Consolas" && ThemePalette.Get("Терминал").CardRadius == 0
             && ThemePalette.Get("Аврора").Scene == ThemeScene.Aurora && ThemePalette.Get("Неон").Scene == ThemeScene.Neon
             && ThemePalette.Get("Океан").Scene == ThemeScene.Ocean,
             "Terminal, aurora, neon and ocean use distinct typography, geometry and original vector scenery");
+        check(ThemePalette.Get("Светлая").Colors[1] == "#FFFFFF" && !ThemePalette.Get("Светлая").NativeGlass
+            && ThemePalette.Get("Светлая").TitleFont != ThemePalette.Get("Бумага").TitleFont,
+            "Neutral light theme and warm paper are separate choices");
+        check(ThemePalette.Get("Космос").Scene == ThemeScene.Orbital && ThemePalette.Get("Графит").Colors[0] == "#141414",
+            "Orbital space scenery and neutral graphite differ from purple star and blue dark themes");
     }
 }

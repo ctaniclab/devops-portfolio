@@ -9,6 +9,7 @@ namespace MailArchive;
 public sealed class DisplaySettings
 {
     public string Theme { get; set; } = "Системная";
+    public string Language { get; set; } = "ru";
     public bool CompatibleRendering { get; set; } = true;
     public bool GlassEffects { get; set; } = true;
     public static DisplaySettings Current { get; private set; } = new();
@@ -20,6 +21,7 @@ public sealed class DisplaySettings
     {
         try { Current = JsonSerializer.Deserialize<DisplaySettings>(File.ReadAllText(Pathname)) ?? new(); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { Current = new(); }
+        LanguageResources.Apply(Current.Language);
         Apply();
     }
 

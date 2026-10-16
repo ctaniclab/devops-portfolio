@@ -7,7 +7,7 @@ public static class ArchiveUtilities
     public static string SafeDirectoryName(string? original)
     {
         var name = Regex.Replace(original ?? "", "[<>:\"/\\\\|?*\\x00-\\x1f]", "_").Trim(' ', '.');
-        if (name.Length == 0) name = "Без имени";
+        if (name.Length == 0) name = L.T("Без имени");
         if (Regex.IsMatch(name.Split('.')[0], @"^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$", RegexOptions.IgnoreCase)) name = "_" + name;
         if (name.Length > 80) name = name[..80];
         if (char.IsHighSurrogate(name[^1])) name = name[..^1];
@@ -23,12 +23,12 @@ public static class ArchiveUtilities
     }
 
     public static string MsgFileName(string? subject, uint folderId, uint messageId) =>
-        SafeAttachmentName(string.IsNullOrWhiteSpace(subject) ? "Без темы" : subject) + $"-{folderId:X8}-{messageId:X8}.msg";
+        SafeAttachmentName(string.IsNullOrWhiteSpace(subject) ? L.T("Без темы") : subject) + $"-{folderId:X8}-{messageId:X8}.msg";
 
     public static void ValidateMsgDestination(string destination)
     {
-        if (Directory.Exists(destination) || File.Exists(destination)) throw new IOException("Выберите новую папку для MSG. Существующие файлы не перезаписываются.");
-        if (!Directory.Exists(Path.GetDirectoryName(Path.GetFullPath(destination)))) throw new DirectoryNotFoundException("Родительская папка MSG не существует.");
+        if (Directory.Exists(destination) || File.Exists(destination)) throw new IOException(L.T("Выберите новую папку для MSG. Существующие файлы не перезаписываются."));
+        if (!Directory.Exists(Path.GetDirectoryName(Path.GetFullPath(destination)))) throw new DirectoryNotFoundException(L.T("Родительская папка MSG не существует."));
     }
     // Never display email HTML in a browser: no script execution, trackers or navigation.
     public static string HtmlToText(string? html)
@@ -56,12 +56,12 @@ public static class ArchiveUtilities
     public static void ValidateDestination(string source, string destination)
     {
         if (!string.Equals(Path.GetExtension(destination), ".pst", StringComparison.OrdinalIgnoreCase))
-            throw new IOException("Выберите выходной файл с расширением .pst.");
+            throw new IOException(L.T("Выберите выходной файл с расширением .pst."));
         if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
-            throw new IOException("Исходный и выходной файлы должны отличаться.");
+            throw new IOException(L.T("Исходный и выходной файлы должны отличаться."));
         if (File.Exists(destination) || Directory.Exists(destination))
-            throw new IOException("Выходной файл уже существует. Выберите новое имя; перезапись запрещена.");
+            throw new IOException(L.T("Выходной файл уже существует. Выберите новое имя; перезапись запрещена."));
         if (!Directory.Exists(Path.GetDirectoryName(Path.GetFullPath(destination))))
-            throw new DirectoryNotFoundException("Выходная папка не существует.");
+            throw new DirectoryNotFoundException(L.T("Выходная папка не существует."));
     }
 }

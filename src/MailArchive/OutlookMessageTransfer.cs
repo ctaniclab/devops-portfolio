@@ -16,17 +16,17 @@ public static class OutlookMessageTransfer
         string storeId = parent.StoreID;
         if (!session.CompareEntryIDs(storeId, (string)folder.StoreID)
             || !session.CompareEntryIDs((string)parent.EntryID, (string)folder.EntryID))
-            throw new SavedMailVerificationException("Outlook поместил письмо вне выбранной папки PST.");
+            throw new SavedMailVerificationException(L.T("Outlook поместил письмо вне выбранной папки PST."));
         string entryId = moved.EntryID;
         if (string.IsNullOrEmpty(entryId))
-            throw new SavedMailVerificationException("Outlook не присвоил перенесённому письму EntryID.");
+            throw new SavedMailVerificationException(L.T("Outlook не присвоил перенесённому письму EntryID."));
         // Do not reuse the pre-Move object/EntryID or silently retry in the default store.
         stage("ReopenPstMessage");
         dynamic reopened = keep(session.GetItemFromID(entryId, storeId));
         dynamic reopenedParent = keep(reopened.Parent);
         if (!session.CompareEntryIDs((string)reopenedParent.StoreID, (string)folder.StoreID)
             || !session.CompareEntryIDs((string)reopenedParent.EntryID, (string)folder.EntryID))
-            throw new SavedMailVerificationException("Повторно открытое письмо находится вне выбранной папки PST.");
+            throw new SavedMailVerificationException(L.T("Повторно открытое письмо находится вне выбранной папки PST."));
         return (object)reopened;
     }
 }
