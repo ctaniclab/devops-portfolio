@@ -24,7 +24,16 @@ jobs:
         shell: pwsh
         env:
           MAILARCHIVE_MSG_CHECK_OUTPUT: ${{ runner.temp }}/mailarchive-independent-msg
-        run: dotnet run --project tests/MailArchive.Checks -c Release -- tests/fixtures/example-2013.ost tests/fixtures/dist-list.pst
+        run: |
+          dotnet run --project tests/MailArchive.Checks -c Release -- tests/fixtures/example-2013.ost tests/fixtures/dist-list.pst 2>&1 | Tee-Object -FilePath checks.log
+          $checkExit = $LASTEXITCODE
+          if ($checkExit -ne 0) {
+            '### Portable check failure' | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            '```text' | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Get-Content checks.log -Tail 60 | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            '```' | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            exit $checkExit
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

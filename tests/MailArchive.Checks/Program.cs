@@ -33,7 +33,8 @@ try
     using (var journal = new ConversionJournal(journalPath))
     {
         journal.Append(new { Event = "MessageStarted", MessageId = 42 });
-        Check(File.ReadAllLines(journalPath).Length == 1, "Journal is readable before conversion finishes");
+        using (var reader = new StreamReader(new FileStream(journalPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
+            Check(reader.ReadLine() is not null && reader.ReadLine() is null, "Journal is readable before conversion finishes");
         journal.Append(new { Event = "MessageFinished", MessageId = 42, Outcome = "Converted" });
         journal.Append(new { Event = "MessageStarted", MessageId = 43 });
     }
