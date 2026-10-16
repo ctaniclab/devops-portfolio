@@ -44,6 +44,9 @@ public static class OutlookConverter
         var report = new ConversionReport { Source = source, Destination = target,
             Mode = chosen is null ? "Mailbox" : chosen.Count == 1 ? "SelectedMessage" : "SelectedMessages", Selection = selection,
             Selections = chosen?.Distinct().ToList(), OutputFormat = format.ToString().ToUpperInvariant(), IncludeServiceFolders = includeServiceFolders };
+        report.JournalPath = reportPath + ".jsonl";
+        using var journal = new ConversionJournal(report.JournalPath);
+        journal.Append(new { Event = "ConversionStarted", Report = report });
         using var session = new ComScope();
         dynamic? outlookNamespace = null;
         dynamic? targetRoot = null;
@@ -75,7 +78,7 @@ public static class OutlookConverter
                 outlookNamespace = session.Keep(app.GetNamespace("MAPI"));
             }
             var writer = new MailWriterContext((object?)outlookNamespace, format, target,
-                format == ExportFormat.Msg ? new MsgFolderLayout(root) : null, chosen?.Distinct().Count());
+                format == ExportFormat.Msg ? new MsgFolderLayout(root) : null, chosen?.Distinct().Count(), journal);
             progress.Report(new(0, 0, 0, 0, format == ExportFormat.Msg ? "Подготовка MSG" : "Подготовка Outlook", writer.Total));
             if (format == ExportFormat.Msg)
             {
@@ -146,6 +149,7 @@ public static class OutlookConverter
         if (format == ExportFormat.Pst) OutputFileStatus.Apply(report, target, detached);
         else if (!report.Completed && Directory.Exists(target)) report.RetainedPartialDirectory = target;
         report.FinishedUtc = DateTime.UtcNow;
+        journal.Append(new { Event = "ConversionFinished", Report = report });
         // Never overwrite an existing report. A cancelled/failed conversion also gets a report.
         using (var stream = new FileStream(reportPath, FileMode.CreateNew, FileAccess.Write))
             JsonSerializer.Serialize(stream, report, new JsonSerializerOptions
@@ -212,6 +216,9 @@ public static class OutlookConverter
             report.Examined++;
             var stage = "ReadMessage";
             string? messageClass = null;
+            writer.Journal.Append(new { Event = "MessageStarted", FolderId = source.Nid.dwValue, MessageId = message.Nid.dwValue, Folder = source.Path });
+            var convertedBefore = report.Converted;
+            var skippedBefore = report.Skipped;
             try
             {
                 archive.ReadMessageDetails(message);
@@ -253,12 +260,18 @@ public static class OutlookConverter
                 report.Failed++;
                 report.Issues.Add(new(source.Path, message.Subject ?? "", e.Message, stage, e.ToString(), ErrorCode: "0x" + unchecked((uint)e.HResult).ToString("X8")));
             }
-            finally { message.ClearContents(); message.Properties.Clear(); message.Recipients.Clear(); }
+            finally
+            {
+                writer.Journal.Append(new { Event = "MessageFinished", FolderId = source.Nid.dwValue, MessageId = message.Nid.dwValue,
+                    Outcome = report.Converted > convertedBefore ? "Converted" : report.Skipped > skippedBefore ? "Skipped" : "Failed",
+                    Stage = stage, Issue = report.Converted > convertedBefore ? null : report.Issues.LastOrDefault(), report.Converted, report.Failed, report.Skipped });
+                message.ClearContents(); message.Properties.Clear(); message.Recipients.Clear();
+            }
             progress.Report(new(report.Examined, report.Converted, report.Failed, report.Skipped, source.Path, writer.Total));
         }
     }
 
-    private sealed record MailWriterContext(object? Session, ExportFormat Format, string Target, MsgFolderLayout? MsgFolders, int? Total);
+    private sealed record MailWriterContext(object? Session, ExportFormat Format, string Target, MsgFolderLayout? MsgFolders, int? Total, ConversionJournal Journal);
 
     private static void WriteMessage(XstFile archive, Message message, object? target, PreparedBody body, MailWriterContext writer, string? msgPath,
         Action<string> stage)
@@ -267,6 +280,7 @@ public static class OutlookConverter
         Directory.CreateDirectory(temp);
         using var scope = new ComScope();
         dynamic? reopened = null;
+        object? movedItem = null;
         // Short private path for Outlook's MSG importer; publish verified MSG bytes without COM.
         var standalonePath = Path.Combine(temp, "message.msg");
         try
@@ -300,7 +314,17 @@ public static class OutlookConverter
                     actualHashes.Add(System.Convert.ToHexString(SHA256.HashData(input)));
                 }
                 dynamic savedRecipients = checkScope.Keep(mail.Recipients);
-                expected.Verify(new((string?)mail.Subject ?? "", (string?)mail.HTMLBody ?? "", (string?)mail.Body ?? "", (int)savedRecipients.Count, actualHashes));
+                var identities = new List<string>();
+                for (int index = 1; index <= (int)savedRecipients.Count; index++)
+                {
+                    dynamic recipient = checkScope.Keep(savedRecipients[index]);
+                    dynamic properties = checkScope.Keep(recipient.PropertyAccessor);
+                    identities.Add(SavedMailContent.RecipientIdentity((int)recipient.Type,
+                        (string)properties.GetProperty(Dasl(0x3002001F)), (string)properties.GetProperty(Dasl(0x3003001F))));
+                }
+                dynamic mailProperties = checkScope.Keep(mail.PropertyAccessor);
+                expected.Verify(new((string?)mail.Subject ?? "", (string?)mail.HTMLBody ?? "", (string?)mail.Body ?? "", (int)savedRecipients.Count, actualHashes)
+                    { RecipientIdentities = identities, SenderAddress = expected.SenderAddress is null ? null : (string)mailProperties.GetProperty(Dasl(0x0C1F001F)) });
                 stage(verificationStage == "VerifyPstContent" ? "VerifyPstDates" : "VerifyMsgDates");
                 dynamic dateProperties = checkScope.Keep(mail.PropertyAccessor);
                 dates.Verify(tag =>
@@ -318,9 +342,38 @@ public static class OutlookConverter
             if (target is not null)
             {
                 var imported = OutlookMessageTransfer.MoveAndReopen((object)reopened, target, writer.Session!,
-                    value => (object)scope.Keep(value), stage);
+                    value => (object)scope.Keep(value), stage, value => movedItem = value);
                 reopened = imported;
                 Verify(imported, "VerifyPstContent");
+            }
+        }
+        catch (Exception failure) when (movedItem is not null && target is not null)
+        {
+            // Isolate only the exact newly moved item, and only inside the new PST.
+            // Never Delete(): Outlook could route deletion into an account's Deleted Items.
+            try
+            {
+                dynamic item = movedItem;
+                dynamic parent = scope.Keep(item.Parent);
+                dynamic destination = target;
+                dynamic ns = writer.Session!;
+                if (!ns.CompareEntryIDs((string)parent.StoreID, (string)destination.StoreID))
+                    throw new IOException("Нельзя изолировать элемент вне выходного PST.");
+                dynamic store = scope.Keep(destination.Store);
+                dynamic root = scope.Keep(store.GetRootFolder());
+                dynamic folders = scope.Keep(root.Folders);
+                dynamic quarantine = scope.Keep(folders.Add("Непроверенное-" + Guid.NewGuid().ToString("N"), 6));
+                dynamic isolated = scope.Keep(item.Move(quarantine));
+                dynamic isolatedParent = scope.Keep(isolated.Parent);
+                if (!ns.CompareEntryIDs((string)isolatedParent.StoreID, (string)destination.StoreID)
+                    || !ns.CompareEntryIDs((string)isolatedParent.EntryID, (string)quarantine.EntryID))
+                    throw new IOException("Не подтверждена папка изоляции.");
+                throw new SavedMailVerificationException(failure.Message + " Элемент изолирован в папке «" + (string)quarantine.Name + "» выходного PST.");
+            }
+            catch (SavedMailVerificationException) { throw; }
+            catch (Exception isolationFailure)
+            {
+                throw new AggregateException("Проверка переноса не пройдена; изолировать элемент не удалось. Частичный PST требует проверки.", failure, isolationFailure);
             }
         }
         finally

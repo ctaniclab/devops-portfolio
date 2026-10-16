@@ -27,6 +27,31 @@ TimingChecks.Run(Check);
 DateMetadataChecks.Run(Check);
 StandaloneMsgChecks.Run(Check);
 FolderLayoutChecks.Run(Check);
+var journalPath = Path.Combine(Path.GetTempPath(), "mailarchive-journal-" + Guid.NewGuid() + ".jsonl");
+try
+{
+    using (var journal = new ConversionJournal(journalPath))
+    {
+        journal.Append(new { Event = "MessageStarted", MessageId = 42 });
+        Check(File.ReadAllLines(journalPath).Length == 1, "Journal is readable before conversion finishes");
+        journal.Append(new { Event = "MessageFinished", MessageId = 42, Outcome = "Converted" });
+        journal.Append(new { Event = "MessageStarted", MessageId = 43 });
+    }
+    var records = File.ReadAllLines(journalPath).Select(line => System.Text.Json.JsonDocument.Parse(line)).ToArray();
+    Check(records.Length == 3 && records[1].RootElement.GetProperty("Outcome").GetString() == "Converted"
+        && records[2].RootElement.GetProperty("MessageId").GetInt32() == 43, "Journal preserves completed and interrupted item identities");
+    foreach (var record in records) record.Dispose();
+    Reject(() => { using var duplicate = new ConversionJournal(journalPath); }, "Journal never overwrites an existing run");
+}
+finally { File.Delete(journalPath); }
+using (var cancelledOutline = new CancellationTokenSource())
+{
+    cancelledOutline.Cancel();
+    bool cancelled = false;
+    try { ArchiveOutline.Read(null!, new XstReader.Folder(), false, cancelledOutline.Token); }
+    catch (OperationCanceledException) { cancelled = true; }
+    Check(cancelled, "Cancelled folder enumeration stops before reading the archive");
+}
 var recoveryReport = new ConversionReport();
 var unreadable = FolderReadPolicy.Read(() => throw new IndexOutOfRangeException("bad table"),
     () => [], "Входящие", recoveryReport);

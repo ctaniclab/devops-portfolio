@@ -9,6 +9,7 @@ public static class OutlookConnection
 {
     public static bool IsDisconnected(Exception error)
     {
+        if (error is AggregateException aggregate && aggregate.InnerExceptions.Any(IsDisconnected)) return true;
         for (Exception? current = error; current is not null; current = current.InnerException)
             if (current is InvalidComObjectException || current is COMException && unchecked((uint)current.HResult) is
                 0x80010108 or 0x800706BA or 0x800706BE or 0x80010007 or 0x80010012 or 0x800401FD)

@@ -174,7 +174,13 @@ public partial class MainWindow : Window
         if (reader.LastDiagnosticPath is not null) SetReport(reader.LastDiagnosticPath);
         if (reader.ExportRequested) await BeginConversionAsync(true);
     }
-    private void Search_Changed(object sender, TextChangedEventArgs e) => ApplyFilter();
+    private int searchRevision;
+    private async void Search_Changed(object sender, TextChangedEventArgs e)
+    {
+        int revision = ++searchRevision;
+        await Task.Delay(300);
+        if (revision == searchRevision && IsLoaded) ApplyFilter();
+    }
     private void ApplyFilter()
     {
         if (Messages?.ItemsSource is null) return;

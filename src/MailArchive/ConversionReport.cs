@@ -4,7 +4,7 @@ public sealed record PstFolderInfo(string Path, int Messages);
 public sealed record ConversionIssue(string Folder, string Subject, string Reason, string Stage = "", string? Details = null, string? ItemClass = null, string? ErrorCode = null);
 public sealed class ConversionReport
 {
-    public string AppVersion { get; set; } = "1.6.0";
+    public string AppVersion { get; set; } = "1.6.1";
     public string Mode { get; set; } = "Mailbox";
     public MessageSelection? Selection { get; set; }
     public List<MessageSelection>? Selections { get; set; }
@@ -13,6 +13,7 @@ public sealed class ConversionReport
     public string? RetainedPartialDirectory { get; set; }
     public string Source { get; set; } = "";
     public string Destination { get; set; } = "";
+    public string? JournalPath { get; set; }
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
     public DateTime FinishedUtc { get; set; }
     public int Examined { get; set; }

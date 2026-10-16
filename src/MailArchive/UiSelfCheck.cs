@@ -150,7 +150,10 @@ public static class UiSelfCheck
                     tab.ApplyTemplate();
                     var tabChrome = (Border)tab.Template.FindName("Chrome", tab);
                     var bounds = tabChrome.TransformToAncestor(headerPanel).TransformBounds(new Rect(tabChrome.RenderSize));
-                    if (bounds.Top < -.5 || bounds.Bottom > headerPanel.ActualHeight + .5)
+                    var localBounds = tabChrome.TransformToAncestor(tab).TransformBounds(new Rect(tabChrome.RenderSize));
+                    if (bounds.Top < -.5 || bounds.Bottom > headerPanel.ActualHeight + .5
+                        || bounds.Left < -.5 || bounds.Right > headerPanel.ActualWidth + .5
+                        || localBounds.Left < -.5 || localBounds.Right > tab.ActualWidth + .5)
                         throw new IOException("Tab capsule is clipped by the native tab header: " + theme);
                 }
                 if (extraThemes.TryGetValue(theme, out var filename))
@@ -253,7 +256,7 @@ public static class UiSelfCheck
         finally
         {
             reader?.Close(); main?.Close();
-            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.6.0", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
+            File.WriteAllText(output, JsonSerializer.Serialize(new { AppVersion = "1.6.1", MainWindowVerified = mainVerified, ReaderWindowVerified = readerVerified,
                 HtmlRenderingVerified = htmlVerified, ThemedScrollBarsVerified = scrollbarsVerified, ExportWizardVerified = wizardVerified,
                 ThemesVerified = verifiedThemes, AllThemesVerified = verifiedThemes.Count == ThemePalette.Names.Count,
                 NativeCaptionApiAccepted = captionVerified, NativeDarkModeVerified = captionVerified,

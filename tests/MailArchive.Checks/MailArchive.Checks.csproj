@@ -4,6 +4,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/MailArchive/ConversionJournal.cs" Link="ConversionJournal.cs" />
     <Compile Include="../../vendor/XstReader/*.cs" Link="XstReader/%(Filename)%(Extension)" />
     <Compile Include="../../src/MailArchive/ArchiveUtilities.cs" Link="ArchiveUtilities.cs" />
     <Compile Include="../../src/MailArchive/ConversionReport.cs" Link="ConversionReport.cs" />

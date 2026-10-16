@@ -86,9 +86,9 @@
       </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style TargetType="TabItem">
-      <Setter Property="Foreground" Value="{DynamicResource MutedInk}"/><Setter Property="Margin" Value="0,0,6,0"/>
+      <Setter Property="Foreground" Value="{DynamicResource MutedInk}"/><Setter Property="Margin" Value="0"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
-        <Border x:Name="Chrome" Background="{DynamicResource TabIdleFill}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="{DynamicResource ButtonRadius}" Padding="16,10"><ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/></Border>
+        <Border x:Name="Chrome" Margin="0,0,6,0" Background="{DynamicResource TabIdleFill}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="{DynamicResource ButtonRadius}" Padding="16,10"><ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/></Border>
         <ControlTemplate.Triggers>
           <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Field}"/></Trigger>
           <Trigger Property="IsSelected" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger>

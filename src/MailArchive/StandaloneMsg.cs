@@ -73,6 +73,7 @@ public static class StandaloneMsg
         int sourceFlags = System.Convert.ToInt32(message.Properties.FirstOrDefault(p => (ushort)p.Tag == 0x0E07)?.Value ?? 1);
         properties.Fixed(MsgDateMetadata.FlagsTag, (sourceFlags & (1 | 8 | 0x20)) | (message.Attachments.Count > 0 ? 0x10 : 0));
         int recipientIndex = 0;
+        var recipientIdentities = new List<string>();
         foreach (var recipient in message.Recipients.Where(r => (int)r.RecipientType is >= 1 and <= 3))
         {
             string? address = recipient.EmailAddress ?? recipient.DisplayName;
@@ -85,6 +86,7 @@ public static class StandaloneMsg
             string addressType = recipient.Properties.FirstOrDefault(p => (ushort)p.Tag == 0x3002)?.Value as string
                 ?? (address.StartsWith("/", StringComparison.Ordinal) ? "EX" : "SMTP");
             row.Text(0x3002001F, addressType);
+            recipientIdentities.Add(SavedMailContent.RecipientIdentity((int)recipient.RecipientType, addressType, address));
             row.Text(0x3003001F, address);
             row.Bytes(0x0FFF0102, OneOffEntryId(recipient.DisplayName ?? address, addressType, address));
             row.Bytes(0x300B0102, Encoding.UTF8.GetBytes((addressType + ":" + address).ToUpperInvariant() + "\0"));
@@ -123,7 +125,11 @@ public static class StandaloneMsg
         foreach (string name in new[] { "__substg1.0_00020102", "__substg1.0_00030102", "__substg1.0_00040102" })
             using (names.CreateStream(name)) { }
         properties.Save(recipientIndex, attachmentIndex);
-        return new(message.Subject ?? "", body.Html, body.Text, recipientIndex, hashes);
+        return new(message.Subject ?? "", body.Html, body.Text, recipientIndex, hashes)
+        {
+            RecipientIdentities = recipientIdentities,
+            SenderAddress = message.Properties.FirstOrDefault(p => (ushort)p.Tag == 0x0C1F)?.Value as string
+        };
     }
 
     private static byte[] OneOffEntryId(string name, string addressType, string address)
@@ -148,9 +154,22 @@ public static class StandaloneMsg
             using var data = root.OpenStorage("__attach_version1.0_#" + i.ToString("X8")).OpenStream("__substg1.0_37010102");
             hashes.Add(System.Convert.ToHexString(SHA256.HashData(data)));
         }
+        var recipientIdentities = new List<string>();
         for (int i = 0; i < recipients; i++)
-            _ = Read(root.OpenStorage("__recip_version1.0_#" + i.ToString("X8")), "__substg1.0_3003001F");
-        expected.Verify(new(Text(0x0037001F), Encoding.UTF8.GetString(Read(root, "__substg1.0_10130102")), Text(0x1000001F), recipients, hashes));
+        {
+            var storage = root.OpenStorage("__recip_version1.0_#" + i.ToString("X8"));
+            var row = Read(storage, MsgDateMetadata.StreamName);
+            if (row.Length < 8 || (row.Length - 8) % 16 != 0) throw new IOException("Неверная таблица получателя MSG.");
+            int type = -1;
+            for (int offset = 8; offset < row.Length; offset += 16)
+                if (BinaryPrimitives.ReadUInt32LittleEndian(row.AsSpan(offset)) == 0x0C150003)
+                    type = BinaryPrimitives.ReadInt32LittleEndian(row.AsSpan(offset + 8));
+            recipientIdentities.Add(SavedMailContent.RecipientIdentity(type,
+                Encoding.Unicode.GetString(Read(storage, "__substg1.0_3002001F")),
+                Encoding.Unicode.GetString(Read(storage, "__substg1.0_3003001F"))));
+        }
+        expected.Verify(new(Text(0x0037001F), Encoding.UTF8.GetString(Read(root, "__substg1.0_10130102")), Text(0x1000001F), recipients, hashes)
+            { RecipientIdentities = recipientIdentities, SenderAddress = expected.SenderAddress is null ? null : Text(0x0C1F001F) });
         dates.Verify(tag => MsgDateMetadata.ReadTime(table, tag));
     }
 }

@@ -7,6 +7,10 @@ public sealed class SavedMailVerificationException(string reason) : IOException(
 
 public sealed record SavedMailContent(string Subject, string Html, string Text, int Recipients, IReadOnlyList<string> AttachmentHashes)
 {
+    public IReadOnlyList<string>? RecipientIdentities { get; init; }
+    public string? SenderAddress { get; init; }
+    public static string RecipientIdentity(int type, string addressType, string address)
+        => $"{type}:{addressType.Trim().ToUpperInvariant()}:{address.Trim().ToUpperInvariant()}";
     public static string VisibleText(string html)
     {
         var document = new HtmlParser().ParseDocument(html);
@@ -36,6 +40,11 @@ public sealed record SavedMailContent(string Subject, string Html, string Text, 
             throw new SavedMailVerificationException("После сохранения пропало изображение из письма без текста.");
         if (actual.Recipients != Recipients)
             throw new SavedMailVerificationException("После сохранения не совпало количество получателей.");
+        if (SenderAddress is not null && !string.Equals(SenderAddress.Trim(), actual.SenderAddress?.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new SavedMailVerificationException("После сохранения не совпал адрес отправителя.");
+        if (RecipientIdentities is not null && (actual.RecipientIdentities is null ||
+            !RecipientIdentities.Order(StringComparer.Ordinal).SequenceEqual(actual.RecipientIdentities.Order(StringComparer.Ordinal))))
+            throw new SavedMailVerificationException("После сохранения не совпали адреса или типы получателей (Кому/Копия/Скрытая копия).");
         if (!AttachmentHashes.Order(StringComparer.Ordinal).SequenceEqual(actual.AttachmentHashes.Order(StringComparer.Ordinal), StringComparer.Ordinal))
             throw new SavedMailVerificationException("После сохранения не совпали количество или SHA256 вложений.");
     }
